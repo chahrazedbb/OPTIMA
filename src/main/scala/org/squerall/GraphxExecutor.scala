@@ -27,7 +27,6 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
             joinPairs: Map[(String,String), String],
             edgeId:Int
            ): (Graph[String, String], Integer, String,  Map[String, Int], Any) = {
-    val startTimeMillis = System.currentTimeMillis()
 
     val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
     val sc = spark.sparkContext
@@ -73,7 +72,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
         case "csv" => df = spark.read.options(options).csv(sourcePath)
 
           val mycolumns = columns.split(",")
-          val myFinalColumns = df.columns
+          var myFinalColumns = df.columns
           val toRemove = "`".toSet
 
           df.columns.zipWithIndex.foreach {
@@ -121,12 +120,6 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
         case _ =>
       }
     }
-
-    val endTimeMillis = System.currentTimeMillis()
-    val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
-    println("time taken by data extraction = " + durationSeconds)
-
-    val startTimeMillis2 = System.currentTimeMillis()
 
     var whereString = ""
 
@@ -311,10 +304,6 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
     println("this is finalGP")
     facts.collect.foreach(println(_))
 
-    val endTimeMillis2 = System.currentTimeMillis()
-    val durationSeconds2 = (endTimeMillis2 - startTimeMillis2) // 1000
-    println("time taken by data filtering = " + durationSeconds2)
-
     (finalGP, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
   }
 
@@ -368,9 +357,8 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
 
       if (firstTime) {
         print("this is join 1")
-        //val stopwatch: StopWatch = new StopWatch
-        //stopwatch start()
-        val startTimeMillis = System.currentTimeMillis()
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
         firstTime = false
         seenDF.add((op1, jVal))
         seenDF.add((op2, "ID"))
@@ -408,21 +396,18 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           jGrah = Graph(gph1.vertices.union(gph2.vertices), gph1.edges.union(edge44))
         }
 
-      //  stopwatch stop()
-       // val timeTaken = stopwatch.getTime
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
 
-        val endTimeMillis = System.currentTimeMillis()
-        val durationSeconds = (endTimeMillis - startTimeMillis)
-        println("time aken by join 1 = " + durationSeconds)
+        println("time aken by join 1 = " + timeTaken)
       } else {
         val dfs_only = seenDF.map(_._1)
 
         if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
 
           print("this is join 2")
-          val startTimeMillis = System.currentTimeMillis()
-         // val stopwatch: StopWatch = new StopWatch
-          //stopwatch start()
+          val stopwatch: StopWatch = new StopWatch
+          stopwatch start()
           //extracting the foreign key
           edges = jGrah.edges.filter {
             case Edge(_, _, label) => label.equals(omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns)
@@ -467,21 +452,16 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           seenDF.add((op2,"ID"))
 
           println("number of edges join 2 = "  + jGrah.edges.count())
-        //  stopwatch stop()
+          stopwatch stop()
 
          // val timeTaken = stopwatch.getTime
 
         //  println("time aken by join 3 = " + timeTaken)
 
-          val endTimeMillis = System.currentTimeMillis()
-          val durationSeconds = (endTimeMillis - startTimeMillis)
-          println("time aken by join 2 = " + durationSeconds)
-
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
           print("this is join 3")
-          val startTimeMillis = System.currentTimeMillis()
-       //   val stopwatch: StopWatch = new StopWatch
-        //  stopwatch start()
+          val stopwatch: StopWatch = new StopWatch
+          stopwatch start()
           /* val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                               val rightJVar = omitQuestionMark(op2) + "_ID"
                               jDF = df1.join(jDF, df1.col(leftJVar).equalTo(jDF.col(rightJVar)))
@@ -521,15 +501,11 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           seenDF.add((op1,jVal))
 
           println("number of edges join 3 = "  + jGrah.edges.count())
-         // stopwatch stop()
+          stopwatch stop()
 
          // val timeTaken = stopwatch.getTime
 
          // println("time aken by join 3 = " + timeTaken)
-
-          val endTimeMillis = System.currentTimeMillis()
-          val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
-          println("time aken by join 3 = " + durationSeconds)
 
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
           print("this is join 4")
@@ -654,9 +630,8 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
   }
 
   def project(jDF: Any, columnNames: Seq[String], distinct: Boolean): Graph[String, String] = {
-  //  val stopwatch: StopWatch = new StopWatch
-   // stopwatch start()
-   val startTimeMillis = System.currentTimeMillis()
+    val stopwatch: StopWatch = new StopWatch
+    stopwatch start()
     var jGP = jDF.asInstanceOf[Graph[String,String]]
     var myEdges: RDD[Edge[String]] = null
 
@@ -683,9 +658,6 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
    // stopwatch stop()
    // val timeTaken = stopwatch.getTime
     //println("this is projection time = " + timeTaken)
-   val endTimeMillis = System.currentTimeMillis()
-    val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
-    println("time aken by projection= " + durationSeconds)
 
     jGP
   }
