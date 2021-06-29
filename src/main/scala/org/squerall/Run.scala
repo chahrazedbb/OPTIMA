@@ -326,15 +326,21 @@ class Run[A] (executor: QueryExecutor[A]) {
     if (limit > 0)
       finalDataSet = executor.limit(finalDataSet, limit)
 
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
+    //val stopwatch: StopWatch = new StopWatch
+    //stopwatch start()
+
+    val startTimeMillis = System.currentTimeMillis()
 
     executor.run(finalDataSet)
 
-    stopwatch stop()
+    val endTimeMillis = System.currentTimeMillis()
+    val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
+    println("Time taken solely by the actual query execution" + durationSeconds)
 
-    val timeTaken = stopwatch.getTime
+    //stopwatch stop()
 
-    println(s"Time taken solely by the actual query execution: $timeTaken")
+    //val timeTaken = stopwatch.getTime
+
+    //println(s"Time taken solely by the actual query execution: $timeTaken")
   }
 }

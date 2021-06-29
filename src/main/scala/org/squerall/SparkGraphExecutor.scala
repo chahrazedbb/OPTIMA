@@ -8,11 +8,12 @@ import org.apache.spark.graphx.{Edge, Graph, VertexId}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.squerall.Helpers._
+import org.squerall.test.{header, sc, vertex}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecutor[Graph[String,String]] {
+class SparkGraphxExecutor (sparkURI: String, mappingsFile: String){
   def query(sources : mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
             optionsMap_entity: mutable.HashMap[String, (Map[String, String],String)],
             toJoinWith: Boolean,
@@ -25,17 +26,19 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String,String), String],
-            edgeId:Int
-           ): (Graph[String, String], Integer, String,  Map[String, Int], Any) = {
+            edgeId:String
+           ): (Graph[String, String], Integer, String,  Map[String, String], Any) = {
+
     val startTimeMillis = System.currentTimeMillis()
 
     val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
     val sc = spark.sparkContext
 
-    var finalGP : Graph[String,String] = null
-    var edgeIdMap : Map[String, Int] = Map.empty
+    var edgeIdMap : Map[String, String] = Map.empty
     var dataSource_count = 0
     var parSetId = ""
+    var vertex: RDD[(VertexId, Array[String])] = null
+    var header = ""
 
     for (s <- sources) {
 
@@ -63,61 +66,14 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           columns = columns + "," + id + " AS " + str + "_ID"
       }
 
-      println("those are columns " + columns)
-
-      var vertex: RDD[(VertexId, String)] = null
-      var edge: RDD[Edge[String]] = null
-      var df : DataFrame = null
-
       sourceType match {
-        case "csv" => df = spark.read.options(options).csv(sourcePath)
-
-          val mycolumns = columns.split(",")
-          val myFinalColumns = df.columns
-          val toRemove = "`".toSet
-
-          df.columns.zipWithIndex.foreach {
-            case (x, i) =>
-              mycolumns.foreach(col =>
-                if(col.split("AS")(0).filterNot(toRemove).trim.equals(x))
-                {
-                  myFinalColumns(i) = col.split("AS")(1).filterNot(toRemove).trim
-                }
-              )
-          }
-
-          println("columns columns" )
-          myFinalColumns.foreach(println(_))
-
+        case "csv" =>
+          val data = sc.textFile(sourcePath)
+          header = data.first()
+          vertex =  data.filter(line => line != header)
+            .map(line =>  line.split(","))
+            .map( parts => ((edgeId+parts.head).toLong, parts.tail))
           edgeIdMap = Map(str -> edgeId)
-
-          df.columns.zipWithIndex.foreach{ case(col,i) =>
-            if(vertex == null){
-              vertex = df.rdd.map((x)=>((edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong, x.get(i).toString))
-              edge = df.rdd.map((x)=>(Edge((edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong,
-              (edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong, myFinalColumns.toList(i))))
-            }else if(edge == null){
-              vertex = vertex.union(df.rdd.map((x)=>((edgeId.toString + i + x.get(0).toString).toLong,
-                x.get(i).toString)))
-              edge = df.rdd.map((x)=>(Edge((edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong,
-                (edgeId.toString + i + x.get(0).toString).toLong, myFinalColumns.toList(i))))
-            }else{
-              vertex = vertex.union(df.rdd.map((x)=>((edgeId.toString + i + x.get(0).toString).toLong,
-                x.get(i).toString)))
-              edge = edge.union(df.rdd.map((x)=>(Edge((edgeId.toString + edgeId.toString + edgeId.toString +
-                x.get(0).toString).toLong,
-                (edgeId.toString + i + x.get(0).toString).toLong, myFinalColumns.toList(i)))))
-            }
-          }
-          finalGP = Graph(vertex, edge)
-          println("tttttttttttttttttttttttttttttt")
-          val facts: RDD[String] = finalGP.triplets.map(triplet => triplet.srcAttr + ","+triplet.attr+"," + triplet.dstAttr)
-          facts.collect.foreach(println(_))
-          println("those are the vertices *******************************")
-          vertex.collect.foreach(println(_))
-          println("those are the edges *******************************")
-          edge.collect.foreach(println(_))
-
         case _ =>
       }
     }
@@ -131,7 +87,6 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
     var whereString = ""
 
     var nbrOfFiltersOfThisStar = 0
-
 
     val it = filters.keySet().iterator()
     while (it.hasNext) {
@@ -150,156 +105,43 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
 
         val conditions = filters.get(value).iterator()
         while (conditions.hasNext) {
-
-          var edge: RDD[Edge[String]] = null
-          var tempedge: RDD[Edge[String]] = null
-          var vertex: RDD[(VertexId, String)] = null
-
           val operand_value = conditions.next()
-
           whereString = column + operand_value._1 + operand_value._2
-
           println("whereString : " + whereString)
+          val colIndex = header.split(",").indexOf(column)-1
 
           if (operand_value._1 != "regex") {
-              edge = finalGP.edges.filter{case Edge(_,_,label) => label.equals(column)}
-              println("this is edges wherestring")
-              edge.collect.foreach(println(_))
-              if(edge != null) {
-                if(isAllDigits(operand_value._2)  && operand_value._1.equals("=")){
-                  println("this is ==" + isAllDigits(operand_value._2) + " " )
-                  edge.collect.foreach(e =>
-                    if (vertex == null) {
-                      vertex = finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong==operand_value._2.toLong)
-                        case _ => false
-                      }
-                    } else {
-                      vertex = vertex.union(finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong==operand_value._2.toLong)
-                        case _ => false
-                      })
-                    }
-                  )
-                }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<")){
-                  edge.collect.foreach(e =>
-                    if (vertex == null) {
-                      vertex = finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong<operand_value._2.toLong)
-                        case _ => false
-                      }
-                    } else {
-                      vertex = vertex.union(finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong<operand_value._2.toLong)
-                        case _ => false
-                      })
-                    }
-                  )
-                }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">")){
-                  edge.collect.foreach(e =>
-                    if (vertex == null) {
-                      vertex = finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong>operand_value._2.toLong)
-                        case _ => false
-                      }
-                    } else {
-                      vertex = vertex.union(finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong>operand_value._2.toLong)
-                        case _ => false
-                      })
-                    }
-                  )
-                }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">=")){
-                  edge.collect.foreach(e =>
-                    if (vertex == null) {
-                      vertex = finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong >= operand_value._2.toLong)
-                        case _ => false
-                      }
-                    } else {
-                      vertex = vertex.union(finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong >= operand_value._2.toLong)
-                        case _ => false
-                      })
-                    }
-                  )
-                }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<=")){
-                  edge.collect.foreach(e =>
-                    if (vertex == null) {
-                      vertex = finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong <= operand_value._2.toLong)
-                        case _ => false
-                      }
-                    } else {
-                      vertex = vertex.union(finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.toLong <= operand_value._2.toLong)
-                        case _ => false
-                      })
-                    }
-                  )
-                }else{
-                  println("this is  wherestring wherestring wherestring wherestring wherestring" + operand_value._2.split("\"")(1))
-                  edge.collect.foreach(e =>
-                    if (vertex == null) {
-                      vertex = finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.equals(operand_value._2.split("\"")(1)))
-                        case _ => false
-                      }
-                    } else {
-                      vertex = vertex.union(finalGP.vertices.filter {
-                        case (id, prop) => (id == e.dstId && prop.equals(operand_value._2.split("\"")(1)))
-                        case _ => false
-                      })
-                    }
-                  )
+              if(isAllDigits(operand_value._2)  && operand_value._1.equals("=")){
+                vertex = vertex.filter {
+                  case (id, prop) => (prop(colIndex).toLong==operand_value._2.toLong)
+                  case _ => false
                 }
-                println("this is vertices wherestring")
-                if (vertex != null) {
-                  vertex.collect.foreach(println(_))
-                  vertex.collect.foreach {
-                    case (id, prop) =>
-                      if (tempedge == null) {
-                        tempedge = edge.filter { case Edge(_, dis, _) => dis == id }
-                      } else {
-                        tempedge = tempedge.union(edge.filter { case Edge(_, dis, _) => dis == id })
-                      }
-                  }
-                  edge = null
-                  if(tempedge != null){
-                    tempedge.collect.foreach(e =>
-                      if (edge == null) {
-                        edge = finalGP.edges.filter { case Edge(src, _, _) => src == e.srcId }
-                      } else {
-                        edge = edge.union(finalGP.edges.filter { case Edge(src, _, _) => src == e.srcId })
-                      }
-                    )
-                    if(edge!=null){
-                      finalGP = Graph(finalGP.vertices, edge)
-
-                    }else{
-                      val sc = spark.sparkContext
-                      vertex = sc.parallelize(Array((0L,"")))
-                      edge = sc.parallelize( Array.empty[Edge[String]])
-                      finalGP = Graph(vertex,edge)
-                    }
-                  }else{
-                    val sc = spark.sparkContext
-                    vertex = sc.parallelize(Array((0L,"")))
-                    edge = sc.parallelize( Array.empty[Edge[String]])
-                    finalGP = Graph(vertex,edge)
-                  }
-                }else{
-                  val sc = spark.sparkContext
-                  vertex = sc.parallelize(Array((0L,"")))
-                  edge = sc.parallelize( Array.empty[Edge[String]])
-                  finalGP = Graph(vertex,edge)
+              }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<")){
+                vertex = vertex.filter {
+                  case (id, prop) => (prop(colIndex).toLong<operand_value._2.toLong)
+                  case _ => false
                 }
-
+              }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">")){
+                vertex = vertex.filter {
+                  case (id, prop) => (prop(colIndex).toLong>operand_value._2.toLong)
+                  case _ => false
+                }
+              }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">=")){
+                vertex = vertex.filter {
+                  case (id, prop) => (prop(colIndex).toLong>=operand_value._2.toLong)
+                  case _ => false
+                }
+              }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<=")){
+                vertex = vertex.filter {
+                  case (id, prop) => (prop(colIndex).toLong<=operand_value._2.toLong)
+                  case _ => false
+                }
               }else{
-                println("no filter here ")
-                finalGP.edges.collect.foreach(println(_))
+                vertex = vertex.filter {
+                  case (id, prop) => (prop(colIndex).equals(operand_value._2.split("\"")(1)))
+                  case _ => false
+                }
               }
-
           }
           // else  finalGP = finalGP.filter(finalGP(column).like(operand_value._2.replace("\"","")))
           // regular expression with _ matching an arbitrary character and % matching an arbitrary sequence
@@ -307,15 +149,11 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
       }
     }
 
-    val facts: RDD[String] = finalGP.triplets.map(triplet =>triplet.srcAttr+ " "  +triplet.attr+ " " + triplet.dstAttr)
-    println("this is finalGP")
-    facts.collect.foreach(println(_))
-
     val endTimeMillis2 = System.currentTimeMillis()
     val durationSeconds2 = (endTimeMillis2 - startTimeMillis2) // 1000
     println("time taken by data filtering = " + durationSeconds2)
 
-    (finalGP, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
+    (null, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
   }
 
   def transform(ps: Any, column: String, transformationsArray: Array[String]): Any = {
@@ -408,8 +246,8 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           jGrah = Graph(gph1.vertices.union(gph2.vertices), gph1.edges.union(edge44))
         }
 
-      //  stopwatch stop()
-       // val timeTaken = stopwatch.getTime
+        //  stopwatch stop()
+        // val timeTaken = stopwatch.getTime
 
         val endTimeMillis = System.currentTimeMillis()
         val durationSeconds = (endTimeMillis - startTimeMillis)
@@ -421,7 +259,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
 
           print("this is join 2")
           val startTimeMillis = System.currentTimeMillis()
-         // val stopwatch: StopWatch = new StopWatch
+          // val stopwatch: StopWatch = new StopWatch
           //stopwatch start()
           //extracting the foreign key
           edges = jGrah.edges.filter {
@@ -450,7 +288,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
 
           //creating the new graph
           if(edges != null && edges.count()!=0){
-          jGrah = Graph(jGrah.vertices.union(gph2.vertices),jGrah.edges.union(edges))
+            jGrah = Graph(jGrah.vertices.union(gph2.vertices),jGrah.edges.union(edges))
           }else{
             val vertex: RDD[(VertexId,String)] = scc.parallelize(Array((0L,"")))
             val edge: RDD[Edge[String]] = scc.parallelize(Array(Edge(0L,0L,"")))
@@ -467,11 +305,11 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           seenDF.add((op2,"ID"))
 
           println("number of edges join 2 = "  + jGrah.edges.count())
-        //  stopwatch stop()
+          //  stopwatch stop()
 
-         // val timeTaken = stopwatch.getTime
+          // val timeTaken = stopwatch.getTime
 
-        //  println("time aken by join 3 = " + timeTaken)
+          //  println("time aken by join 3 = " + timeTaken)
 
           val endTimeMillis = System.currentTimeMillis()
           val durationSeconds = (endTimeMillis - startTimeMillis)
@@ -480,8 +318,8 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
           print("this is join 3")
           val startTimeMillis = System.currentTimeMillis()
-       //   val stopwatch: StopWatch = new StopWatch
-        //  stopwatch start()
+          //   val stopwatch: StopWatch = new StopWatch
+          //  stopwatch start()
           /* val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                               val rightJVar = omitQuestionMark(op2) + "_ID"
                               jDF = df1.join(jDF, df1.col(leftJVar).equalTo(jDF.col(rightJVar)))
@@ -512,7 +350,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
 
           //creating the new graph
           if(edges != null && edges.count()!=0){
-          jGrah = Graph(gph1.vertices.union(jGrah.vertices), gph1.edges.union(edges))
+            jGrah = Graph(gph1.vertices.union(jGrah.vertices), gph1.edges.union(edges))
           }else{
             val vertex: RDD[(VertexId,String)] = scc.parallelize(Array((0L,"")))
             val edge: RDD[Edge[String]] = scc.parallelize(Array(Edge(0L,0L,"")))
@@ -521,11 +359,11 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
           seenDF.add((op1,jVal))
 
           println("number of edges join 3 = "  + jGrah.edges.count())
-         // stopwatch stop()
+          // stopwatch stop()
 
-         // val timeTaken = stopwatch.getTime
+          // val timeTaken = stopwatch.getTime
 
-         // println("time aken by join 3 = " + timeTaken)
+          // println("time aken by join 3 = " + timeTaken)
 
           val endTimeMillis = System.currentTimeMillis()
           val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
@@ -596,7 +434,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
         }
 
         if(edges != null && edges.count()!=0 ){
-        jGrah = Graph(jGrah.vertices.union(gph2.vertices), jGrah.edges.union(edges))
+          jGrah = Graph(jGrah.vertices.union(gph2.vertices), jGrah.edges.union(edges))
         }else{
           val vertex: RDD[(VertexId,String)] = scc.parallelize(Array((0L,"")))
           val edge: RDD[Edge[String]] = scc.parallelize(Array(Edge(0L,0L,"")))
@@ -654,9 +492,9 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
   }
 
   def project(jDF: Any, columnNames: Seq[String], distinct: Boolean): Graph[String, String] = {
-  //  val stopwatch: StopWatch = new StopWatch
-   // stopwatch start()
-   val startTimeMillis = System.currentTimeMillis()
+    //  val stopwatch: StopWatch = new StopWatch
+    // stopwatch start()
+    val startTimeMillis = System.currentTimeMillis()
     var jGP = jDF.asInstanceOf[Graph[String,String]]
     var myEdges: RDD[Edge[String]] = null
 
@@ -680,10 +518,10 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
       myEdges
     )
 
-   // stopwatch stop()
-   // val timeTaken = stopwatch.getTime
+    // stopwatch stop()
+    // val timeTaken = stopwatch.getTime
     //println("this is projection time = " + timeTaken)
-   val endTimeMillis = System.currentTimeMillis()
+    val endTimeMillis = System.currentTimeMillis()
     val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
     println("time aken by projection= " + durationSeconds)
 
@@ -805,41 +643,41 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
     this.show(jDF)
   }
 
-/*  def compareValues(opd1: String,opd2: String, op: String): Boolean = {
-    var cond : Boolean=false
+  /*  def compareValues(opd1: String,opd2: String, op: String): Boolean = {
+      var cond : Boolean=false
 
-    if(isAllDigits(opd1) && isAllDigits(opd2)){
-      val  a1: Long = opd1.toLong
-      val  a2: Long = opd2.toLong
-      cond =  compareNumberValues(a1,a2,op)
-    }else{
-      cond = compareStringValues(opd1, opd2, op)
+      if(isAllDigits(opd1) && isAllDigits(opd2)){
+        val  a1: Long = opd1.toLong
+        val  a2: Long = opd2.toLong
+        cond =  compareNumberValues(a1,a2,op)
+      }else{
+        cond = compareStringValues(opd1, opd2, op)
+      }
+      cond
     }
-    cond
-  }
 
-  def compareStringValues(opd1: String,opd2: String, op: String): Boolean = {
-    op match {
-      case "<" => opd1 < opd2
-      case ">" => opd1 > opd2
-      case "=" => opd1.equals(opd2)
-      case "<=" => opd1 <= opd2
-      case ">=" => opd1 >= opd2
-      case _ => false
+    def compareStringValues(opd1: String,opd2: String, op: String): Boolean = {
+      op match {
+        case "<" => opd1 < opd2
+        case ">" => opd1 > opd2
+        case "=" => opd1.equals(opd2)
+        case "<=" => opd1 <= opd2
+        case ">=" => opd1 >= opd2
+        case _ => false
+      }
     }
-  }
 
-  def compareNumberValues(opd1: Long,opd2: Long, op: String): Boolean = {
-    op match {
-      case "<" => opd1 < opd2
-      case ">" => opd1 > opd2
-      case "=" => opd1 == opd2
-      case "<=" => opd1 <= opd2
-      case ">=" => opd1 >= opd2
-      case _ => false
+    def compareNumberValues(opd1: Long,opd2: Long, op: String): Boolean = {
+      op match {
+        case "<" => opd1 < opd2
+        case ">" => opd1 > opd2
+        case "=" => opd1 == opd2
+        case "<=" => opd1 <= opd2
+        case ">=" => opd1 >= opd2
+        case _ => false
+      }
     }
-  }
-*/
-def isAllDigits(x: String) = x forall Character.isDigit
+  */
+  def isAllDigits(x: String) = x forall Character.isDigit
 
 }

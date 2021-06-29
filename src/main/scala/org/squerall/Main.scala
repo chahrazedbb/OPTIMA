@@ -9,9 +9,9 @@ import org.squerall.model.DataQueryFrame
   */
 object Main extends App {
 
-    var queryFile = "/home/chahrazed/Squerall-GUI-master/query.sparql"//args(0)
-    val mappingsFile = "/home/chahrazed/Squerall-GUI-master/conf/mappings.ttl" //args(1)
-    val configFile = "/home/chahrazed/Squerall-GUI-master/conf/config"//args(2)
+    var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q1.sparql"//args(0)
+    val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
+    val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
     val executorID = "local"//args(3)
     val reorderJoin = "n"//args(4)
     val queryEngine = "s"//args(5)
