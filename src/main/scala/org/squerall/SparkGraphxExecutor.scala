@@ -25,7 +25,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String, String), String], edgeId: Int):
-            (Graph[Array[String],String],Integer,String,Map[String,Array[String]],Any)  = {
+  (Graph[Array[String],String],Integer,String,Map[String,Array[String]],Any)  = {
 
     val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
     val sc = spark.sparkContext
@@ -252,8 +252,12 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           var mylist : mutable.MutableList[Long]=  mutable.MutableList()
           jGrah.edges.collect().foreach{
             case e =>
-              mylist += e.dstId
-              mylist += e.srcId
+              if(!mylist.contains(e.dstId)){
+                mylist += e.dstId
+              }
+              if(!mylist.contains(e.srcId)){
+                mylist += e.srcId
+              }
           }
           var finalED: RDD[Edge[String]] = edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId))
 
@@ -264,8 +268,12 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           var mylist2 : mutable.MutableList[Long] =  mutable.MutableList()
           finalED.collect().foreach{
             case e =>
-              mylist2 += e.dstId
-              mylist2 += e.srcId
+              if(!mylist2.contains(e.dstId)){
+                mylist2 += e.dstId
+              }
+              if(!mylist2.contains(e.srcId)){
+                mylist2 += e.srcId
+              }
           }
 
           finalED = finalED.union(jGrah.edges.filter(e => mylist2.contains(e.dstId) || mylist2.contains(e.srcId)))
@@ -294,8 +302,12 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           var mylist : mutable.MutableList[Long]=  mutable.MutableList()
           jGrah.edges.collect().foreach{
             case e =>
-              mylist += e.dstId
-              mylist += e.srcId
+              if(!mylist.contains(e.dstId)){
+                mylist += e.dstId
+              }
+              if(!mylist.contains(e.srcId)){
+                mylist += e.srcId
+              }
           }
 
           var finalED: RDD[Edge[String]] = edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId))
@@ -308,8 +320,12 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
           finalED.collect().foreach{
             case e =>
-              mylist2 += e.dstId
-              mylist2 += e.srcId
+              if(!mylist2.contains(e.dstId)){
+                mylist2 += e.dstId
+              }
+              if(!mylist2.contains(e.srcId)){
+                mylist2 += e.srcId
+              }
           }
 
           finalED = finalED.union(jGrah.edges.filter(e => mylist2.contains(e.dstId) || mylist2.contains(e.srcId)))
@@ -477,7 +493,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     println("those are the edges ")
     graph.edges.collect().foreach(println(_))
     println("those are the vertices ")
-    graph.vertices.collect().foreach(println(_))
+    graph.vertices.collect().foreach(println(_
+    ))
 
     val facts2: RDD[String] = graph.triplets.map(triplet =>
       triplet.srcAttr(0)

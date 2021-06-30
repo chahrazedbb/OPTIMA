@@ -18,7 +18,7 @@ object Main extends App {
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
     val executorID = "local"//args(3)
     val reorderJoin = "n"//args(4)
-    val queryEngine = "s"//args(5)
+    val queryEngine = "g"//args(5)
 
     if (queryEngine == "s") { // Spark as query engine
         val executor : SparkExecutor = new SparkExecutor(executorID, mappingsFile)
