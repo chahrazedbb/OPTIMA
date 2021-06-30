@@ -25,7 +25,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String, String), String], edgeId: Int):
-            (RDD[(VertexId,Array[String])],Integer,String,Map[String,Array[String]],Any)  = {
+            (Graph[Array[String],String],Integer,String,Map[String,Array[String]],Any)  = {
 
     val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
     val sc = spark.sparkContext
@@ -36,6 +36,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var finalVer: RDD[(VertexId, Array[String])] = null
 
     var header = ""
+    var FinalColumns = ""
 
     for (s <- sources) {
 
@@ -63,14 +64,26 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           columns = columns + "," + id + " AS " + str + "_ID"
       }
 
+      println("those are columns " + columns)
+
       sourceType match {
         case "csv" =>
           val data = sc.textFile(sourcePath)
           header = data.first()
           vertex =  data.filter(line => line != header)
             .map(line =>  line.split(","))
-            .map( parts => ((edgeId+parts.head).toLong, parts.tail))
-          edgeIdMap = Map(str -> Array(edgeId,header))
+            .map( parts => ((edgeId+"00"+parts.head).toLong, parts.tail))
+          val mycolumns = columns.split(",")
+          val toRemove = "`".toSet
+          var myheader = header.split(",")
+
+          mycolumns.foreach(col =>
+            if(myheader.contains(col.split("AS")(0).filterNot(toRemove).trim)) {
+              var  i = myheader.indexOf(col.split("AS")(0).filterNot(toRemove).trim)
+              myheader(i) = col.split("AS")(1).filterNot(toRemove).trim
+            }
+          )
+          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
         case _ =>
       }
       if(finalVer == null) {
@@ -78,6 +91,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       } else{
         finalVer = finalVer.union(vertex)
       }
+
     }
 
     var whereString = ""
@@ -145,7 +159,10 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       }
     }
 
-    (finalVer, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
+    val edge: RDD[Edge[String]]  = sc.parallelize( Array.empty[Edge[String]])
+    var graph:Graph[Array[String],String] = Graph(finalVer,edge)
+
+    (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
   }
 
   def transform(ps: Any, column: String, transformationsArray: Array[String]): Any = {
@@ -154,7 +171,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   def join(joins: ArrayListMultimap[String, (String, String)],
            prefixes: Map[String, String],
-           star_df: Map[String, RDD[(VertexId, Array[String])]],
+           star_df: Map[String, Graph[Array[String],String]],
            edgeIdMap: Map[String,Array[String]],
            sc: Any)
   :Graph[Array[String],String] = {
@@ -166,8 +183,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var firstTime = true
     var jGrah :Graph[Array[String],String] = null
 
-    val scc = sc.asInstanceOf[SparkContext]
-
     val it = joins.entries.iterator
     while ({it.hasNext}) {
       val entry = it.next
@@ -176,8 +191,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       val op2 = entry.getValue._1
       val jVal = entry.getValue._2
 
-      val vertex1 = star_df(op1)
-      val vertex2 = star_df(op2)
+      val vertex1 = star_df(op1).vertices
+      val vertex2 = star_df(op2).vertices
 
       val njVal = get_NS_predicate(jVal)
       val ns = prefixes(njVal._1)
@@ -204,25 +219,22 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         firstTime = false
         seenDF.add((op1, jVal))
         seenDF.add((op2, "ID"))
-
         //foreign key
         val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
         //getting the fk column
         val colIndex = header1.split(",").indexOf(fk)-1
-
         //creating the edges
         val edges: RDD[Edge[String]] =vertex1
           .map{ (v) =>
-            Edge(v._1,(id2+v._2(colIndex)).toLong, fk)
+            Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
           }
-
         //creating the graph
-        jGrah = Graph(vertex1.union(vertex2), edges)
+        jGrah = Graph(vertex1.union(vertex2).filter((v)=>v._2!=null), edges)
+        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
       } else {
         val dfs_only = seenDF.map(_._1)
 
         if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-
           //foreign key
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
           //getting the fk column
@@ -230,13 +242,14 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //creating the edges
           val edges: RDD[Edge[String]] =jGrah.vertices
             .map{ (v) =>
-              Edge(v._1,(id2+v._2(colIndex)).toLong, fk)
+              Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
             }
+
           //creating the graph
-          jGrah = Graph(jGrah.vertices.union(vertex2), edges)
+          jGrah = Graph(jGrah.vertices.union(vertex2), jGrah.edges.union(edges))
+          jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
 
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
-
           //foreign key
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
           //getting the fk column
@@ -244,11 +257,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //creating the edges
           val edges: RDD[Edge[String]] =vertex1
             .map{ (v) =>
-              Edge(v._1,(id2+v._2(colIndex)).toLong, fk)
+              Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
             }
-          //creating the graph
-          jGrah = Graph(jGrah.vertices.union(vertex1), edges)
 
+          jGrah = Graph(jGrah.vertices.union(vertex1).filter((v)=>v._2!=null), jGrah.edges.union(edges))
+          jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
           pendingJoins.enqueue((op1, (op2, jVal)))
         }
@@ -264,8 +277,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       val op2 = e._2._1
       val jVal = e._2._2
 
-      val vertex1 = star_df(op1)
-      val vertex2 = star_df(op2)
+      val vertex1 = star_df(op1).vertices
+      val vertex2 = star_df(op2).vertices
 
       val njVal = get_NS_predicate(jVal)
       val ns = prefixes(njVal._1)
@@ -289,14 +302,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
       //getting the added number to the edges ids
       if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-
-        /*
-        *  val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-                val rightJVar = omitQuestionMark(op2) + "_ID"
-                 jDF = jDF.join(df2, jDF.col(leftJVar).equalTo(df2.col(rightJVar))) // deep-left
-                //jDF = df2.join(jDF, jDF.col(leftJVar).equalTo(df2.col(rightJVar)))
-
-      */
         //foreign key
         val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
         //getting the fk column
@@ -304,19 +309,12 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         //creating the edges
         val edges: RDD[Edge[String]] =jGrah.vertices
           .map{ (v) =>
-            Edge(v._1,(id2+v._2(colIndex)).toLong, fk)
+            Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
           }
         //creating the graph
-        jGrah = Graph(jGrah.vertices.union(vertex2), edges)
-
+        jGrah = Graph(jGrah.vertices.union(vertex2), jGrah.edges.union(edges))
+        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
       } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
-
-        /*
-        *  val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-                val rightJVar = omitQuestionMark(op2) + "_ID"
-                jDF = jDF.join(df1, df1.col(leftJVar).equalTo(jDF.col(rightJVar))) // deep-left
-
-            */
         //foreign key
         val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
         //getting the fk column
@@ -324,11 +322,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         //creating the edges
         val edges: RDD[Edge[String]] =vertex1
           .map{ (v) =>
-            Edge(v._1,(id2+v._2(colIndex)).toLong, fk)
+            Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
           }
         //creating the graph
-        jGrah = Graph(jGrah.vertices.union(vertex1), edges)
-
+        jGrah = Graph(jGrah.vertices.union(vertex1), jGrah.edges.union(edges))
+        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
       } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
         pendingJoins.enqueue((op1, (op2, jVal)))
       }
@@ -361,13 +359,18 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
   def show(PS: Any): Unit = {
     val graph = PS.asInstanceOf[Graph[Array[String],String]]
 
+    println("those are the edges ")
+    graph.edges.collect().foreach(println(_))
+    println("those are the vertices ")
+    graph.vertices.collect().foreach(println(_))
+
     val facts2: RDD[String] = graph.triplets.map(triplet =>
       triplet.srcAttr.mkString(",")
         + " is the " + triplet.attr
         + " of " + triplet.dstAttr.mkString(",")
     )
     facts2.collect.foreach(println(_))
-    //    println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
+    println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
   }
 
   def run(jDF: Any): Unit = {

@@ -24,7 +24,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String,String), String],
             edgeId:Int
-           ) : (RDD[(VertexId, Array[String])] , Integer, String, Map[String, Array[String]],Any)
+           ) : (T, Integer, String, Map[String, Array[String]],Any)
 
   /* Transforms a ParSet to another ParSet based on the SPARQL TRANSFORM clause */
   def transform(ps: Any, column: String, transformationsArray : Array[String]): Any
@@ -32,7 +32,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   /* Print the schema of the ParSet */
   def join(joins: ArrayListMultimap[String, (String, String)],
            prefixes: Map[String, String],
-           star_df: Map[String, RDD[(VertexId, Array[String])]],
+           star_df: Map[String,T],
            edgeIdMap: Map[String,Array[String]],
            sc: Any): T
 
