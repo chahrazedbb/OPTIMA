@@ -1,5 +1,6 @@
 package org.squerall
 
+import org.apache.commons.lang.time.StopWatch
 import org.apache.spark.graphx.Graph
 import org.apache.spark.sql.DataFrame
 import org.squerall.model.DataQueryFrame
@@ -9,12 +10,15 @@ import org.squerall.model.DataQueryFrame
   */
 object Main extends App {
 
+    val stopwatch: StopWatch = new StopWatch
+    stopwatch start()
+
     var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q1.sparql"//args(0)
     val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
     val executorID = "local"//args(3)
     val reorderJoin = "n"//args(4)
-    val queryEngine = "g"//args(5)
+    val queryEngine = "s"//args(5)
 
     if (queryEngine == "s") { // Spark as query engine
         val executor : SparkExecutor = new SparkExecutor(executorID, mappingsFile)
@@ -32,4 +36,8 @@ object Main extends App {
         run.application(queryFile,mappingsFile,configFile,executorID)
     }
 
+    stopwatch stop()
+    val timeTaken = stopwatch.getTime
+
+    println("the program execution time is " + timeTaken)
 }
