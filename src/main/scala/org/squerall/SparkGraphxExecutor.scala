@@ -461,15 +461,46 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
         pendingJoins.enqueue((op1, (op2, jVal)))
       }
-
       pendingJoins = pendingJoins.tail
     }
     jGrah
   }
 
-  def project(jDF: Any, columnNames: Seq[String], distinct: Boolean): Graph[Array[String], String] = {
+  def project(jDF: Any, columnNames: Seq[String],  edgeIdMap: Map[String,Array[String]],distinct: Boolean): Graph[Array[String], String] = {
     var jGP = jDF.asInstanceOf[Graph[Array[String],String]]
-    //here code
+    var vertex: RDD[(VertexId, Array[String])] = null
+    var edge: RDD[Edge[String]] = null
+    var mycol: mutable.MutableList[String]= mutable.MutableList.empty
+    var triples: RDD[String] = null
+
+    //getting columns index
+      edgeIdMap.values.foreach{
+      case v =>
+        columnNames.foreach{
+          c=>
+            if(v(1).split(",").contains(c) && !mycol.contains(v(0) + "," + v.indexOf(c))){
+              mycol += v(0) + "," + v(1).split(",").indexOf(c)
+              println("  -------------- " + c + "----------- " + v(0) + "," + v(1).split(",").indexOf(c) )
+            }
+        }
+    }
+
+    if(distinct){
+      mycol.foreach{
+        m =>
+          triples = jGP.triplets.map(triplet => {
+            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
+              triplet.srcAttr(m.split(",")(1).toInt)
+            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
+              triplet.dstAttr(m.split(",")(1).toInt)
+            }else{
+              " "
+            }
+          }
+          )
+          triples.distinct().collect.foreach(println(_))
+      }
+    }
     jGP
   }
 
@@ -489,19 +520,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   def show(PS: Any): Unit = {
     val graph = PS.asInstanceOf[Graph[Array[String],String]]
-
-    println("those are the edges ")
-    graph.edges.collect().foreach(println(_))
-    println("those are the vertices ")
-    graph.vertices.collect().foreach(println(_
-    ))
-
-    val facts2: RDD[String] = graph.triplets.map(triplet =>
-      triplet.srcAttr(0)
-        + " is the " + triplet.attr
-        + " of " + triplet.dstAttr(0)
-    )
-    facts2.collect.foreach(println(_))
     println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
   }
 

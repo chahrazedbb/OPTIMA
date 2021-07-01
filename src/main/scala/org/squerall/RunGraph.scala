@@ -318,7 +318,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     }
 
     logger.info("|__ Has distinct? " + distinct)
-    finalDataSet = executor.project(finalDataSet, columnNames, distinct)
+    finalDataSet = executor.project(finalDataSet, columnNames,edgeIdMap, distinct)
 
     if (limit > 0)
       finalDataSet = executor.limit(finalDataSet, limit)

@@ -37,7 +37,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
            sc: Any): T
 
   /* Generates a new ParSet projecting out one or more attributes */
-  def project(jDF: Any, columnNames: Seq[String], distinct: Boolean): T
+  def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], distinct: Boolean): T
 
   /* Counts the number of tuples of a ParSet */
   def count(joinPS: T): Long
