@@ -340,6 +340,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     println("time aken by join 3 = " + timeTaken)
 
                 } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
+                    println("hi there 88")
                     logger.info("...no join possible -> GOING TO THE QUEUE")
                     pendingJoins.enqueue((op1, (op2, jVal)))
 
@@ -348,6 +349,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         }
 
         while (pendingJoins.nonEmpty) {
+            println("hi there 00")
+
             logger.info("ENTERED QUEUED AREA: " + pendingJoins)
             val dfs_only = seenDF.map(_._1)
 
@@ -366,6 +369,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             val df2 = star_df(op2)
 
             if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
+                println("this is joining 4")
                 val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                 val rightJVar = omitQuestionMark(op2) + "_ID"
                 jDF = jDF.join(df2, jDF.col(leftJVar).equalTo(df2.col(rightJVar))) // deep-left
@@ -373,6 +377,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
                 seenDF.add((op2,"ID"))
             } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
+                println("this is joining 5")
                 val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                 val rightJVar = omitQuestionMark(op2) + "_ID"
                 jDF = jDF.join(df1, df1.col(leftJVar).equalTo(jDF.col(rightJVar))) // deep-left
@@ -380,6 +385,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
                 seenDF.add((op1,jVal))
             } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
+                println("hi there 33")
                 pendingJoins.enqueue((op1, (op2, jVal)))
             }
 
