@@ -13,7 +13,7 @@ object Main extends App {
     val stopwatch: StopWatch = new StopWatch
     stopwatch start()
 
-    var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q8.sparql"//args(0)
+    var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q5.sparql"//args(0)
     val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
     val executorID = "local"//args(3)

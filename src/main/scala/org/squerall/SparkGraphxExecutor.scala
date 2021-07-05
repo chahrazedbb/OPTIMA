@@ -75,7 +75,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             .map( parts => ((edgeId+"00"+parts.head).toLong, parts.tail))
           val mycolumns = columns.split(",")
           val toRemove = "`".toSet
-           myheader = header.split(",")
+          myheader = header.split(",")
 
           mycolumns.foreach(col =>
             if(myheader.contains(col.split("AS")(0).filterNot(toRemove).trim)) {
@@ -486,9 +486,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var jGP = jDF.asInstanceOf[Graph[Array[String],String]]
     var mycol: mutable.MutableList[String]= mutable.MutableList.empty
     var triples: RDD[String] = null
+    var temp:Array[Array[String]] =  Array.ofDim[String](3, 20)
+    var num = 0
 
     //getting columns index
-      edgeIdMap.values.foreach{
+    edgeIdMap.values.foreach{
       case v =>
         columnNames.foreach{
           c=>
@@ -500,53 +502,74 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         }
     }
 
+    triples = jGP.triplets.map(triplet => {
+      "["+ triplet.srcAttr.mkString(",") + "] is the " + triplet.attr + " of ["  + triplet.dstAttr.mkString(",") + "]"
+    })
+    triples.distinct.collect().foreach(println(_))
+
     if(distinct){
       mycol.foreach{
         m =>
-          triples = jGP.triplets.map(triplet => {
-            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
-            && m.split(",")(1).toInt > -1){
-              triplet.srcAttr(m.split(",")(1).toInt)
-            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.dstAttr(m.split(",")(1).toInt)
-            }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
-              triplet.srcId.toString
-            }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
-              triplet.dstId.toString
-            }else{
-              "No results found"
+            triples = jGP.triplets.map(triplet => {
+              if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
+                && m.split(",")(1).toInt > -1){
+                triplet.srcAttr(m.split(",")(1).toInt)
+              }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
+                && m.split(",")(1).toInt > -1){
+                triplet.dstAttr(m.split(",")(1).toInt)
+              }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
+                triplet.srcId.toString
+              }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
+                triplet.dstId.toString
+              }else{
+                "No results found"
+              }
             }
-          }
-          )
-          println("last results : ")
-          triples.distinct().collect.foreach(println(_))
+            )
+          temp(num) = triples.distinct().collect().sortBy(_(0))
+          num = num + 1
+          //triples.distinct().collect.sortBy(_(0)).foreach(println(_))
+
       }
+      println("*****************************")
+      println("last results : ")
+      for(j<-0 to temp(0).length-1){
+        print(j + "= [")
+
+        for(i<-0 to num-1)
+          {
+          //Accessing the elements
+          print( temp(i)(j) + ", ")
+        }
+
+        print("]")
+        println()
+      }
+
     }else{
       mycol.foreach{
         m =>
-          triples = jGP.triplets.map(triplet => {
-            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.srcAttr(m.split(",")(1).toInt)
-            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.dstAttr(m.split(",")(1).toInt)
-            }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
-              triplet.srcId.toString
-            }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
-              triplet.dstId.toString
-            }else{
-              "No results found"
+            triples = jGP.triplets.map(triplet => {
+              if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
+                && m.split(",")(1).toInt > -1){
+                triplet.srcAttr(m.split(",")(1).toInt)
+              }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
+                && m.split(",")(1).toInt > -1){
+                triplet.dstAttr(m.split(",")(1).toInt)
+              }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
+                triplet.srcId.toString
+              }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
+                triplet.dstId.toString
+              }else{
+                "No results found"
+              }
             }
-          }
-          )
-          println("last results : ")
-         // triples.collect.foreach(println(_))
-         triples.collect.toArray.sortBy(_(0)).foreach(println(_))
+            )
       }
+      println("last results : ")
+      // triples.collect.foreach(println(_))
+      triples.collect.sortBy(_(0)).foreach(println(_))
     }
-
     jGP
   }
 
@@ -566,7 +589,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   def show(PS: Any): Unit = {
     val graph = PS.asInstanceOf[Graph[Array[String],String]]
-   println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
+    println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
   }
 
   def run(jDF: Any): Unit = {
