@@ -489,6 +489,10 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var temp:Array[Array[String]] =  Array.ofDim[String](3, 20)
     var num = 0
 
+
+    println("cccccccccccccccccccccccccccccc")
+    columnNames.foreach(println(_))
+
     //getting columns index
     edgeIdMap.values.foreach{
       case v =>
@@ -510,25 +514,25 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     if(distinct){
       mycol.foreach{
         m =>
-            triples = jGP.triplets.map(triplet => {
-              if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
-                && m.split(",")(1).toInt > -1){
-                triplet.srcAttr(m.split(",")(1).toInt)
-              }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
-                && m.split(",")(1).toInt > -1){
-                triplet.dstAttr(m.split(",")(1).toInt)
-              }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
-                triplet.srcId.toString
-              }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
-                triplet.dstId.toString
-              }else{
-                "No results found"
-              }
+          triples = jGP.triplets.map(triplet => {
+            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
+              && m.split(",")(1).toInt > -1){
+              triplet.srcAttr(m.split(",")(1).toInt)
+            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
+              && m.split(",")(1).toInt > -1){
+              triplet.dstAttr(m.split(",")(1).toInt)
+            }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
+              triplet.srcId.toString
+            }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
+              triplet.dstId.toString
+            }else{
+              "No results found"
             }
-            )
+          }
+          )
           temp(num) = triples.distinct().collect().sortBy(_(0))
           num = num + 1
-          //triples.distinct().collect.sortBy(_(0)).foreach(println(_))
+        //triples.distinct().collect.sortBy(_(0)).foreach(println(_))
 
       }
       println("*****************************")
@@ -537,7 +541,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         print(j + "= [")
 
         for(i<-0 to num-1)
-          {
+        {
           //Accessing the elements
           print( temp(i)(j) + ", ")
         }
@@ -549,22 +553,22 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     }else{
       mycol.foreach{
         m =>
-            triples = jGP.triplets.map(triplet => {
-              if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
-                && m.split(",")(1).toInt > -1){
-                triplet.srcAttr(m.split(",")(1).toInt)
-              }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
-                && m.split(",")(1).toInt > -1){
-                triplet.dstAttr(m.split(",")(1).toInt)
-              }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
-                triplet.srcId.toString
-              }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
-                triplet.dstId.toString
-              }else{
-                "No results found"
-              }
+          triples = jGP.triplets.map(triplet => {
+            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
+              && m.split(",")(1).toInt > -1){
+              triplet.srcAttr(m.split(",")(1).toInt)
+            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
+              && m.split(",")(1).toInt > -1){
+              triplet.dstAttr(m.split(",")(1).toInt)
+            }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
+              triplet.srcId.toString
+            }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
+              triplet.dstId.toString
+            }else{
+              "No results found"
             }
-            )
+          }
+          )
       }
       println("last results : ")
       // triples.collect.foreach(println(_))

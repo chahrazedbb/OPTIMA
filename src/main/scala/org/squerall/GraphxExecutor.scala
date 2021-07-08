@@ -94,7 +94,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
             if(vertex == null){
               vertex = df.rdd.map((x)=>((edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong, x.get(i).toString))
               edge = df.rdd.map((x)=>(Edge((edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong,
-              (edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong, myFinalColumns.toList(i))))
+                (edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong, myFinalColumns.toList(i))))
             }else if(edge == null){
               vertex = vertex.union(df.rdd.map((x)=>((edgeId.toString + i + x.get(0).toString).toLong,
                 x.get(i).toString)))
@@ -103,8 +103,7 @@ class GraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecu
             }else{
               vertex = vertex.union(df.rdd.map((x)=>((edgeId.toString + i + x.get(0).toString).toLong,
                 x.get(i).toString)))
-              edge = edge.union(df.rdd.map((x)=>(Edge((edgeId.toString + edgeId.toString + edgeId.toString +
-                x.get(0).toString).toLong,
+              edge = edge.union(df.rdd.map((x)=>(Edge((edgeId.toString + edgeId.toString + edgeId.toString + x.get(0).toString).toLong,
                 (edgeId.toString + i + x.get(0).toString).toLong, myFinalColumns.toList(i)))))
             }
           }
