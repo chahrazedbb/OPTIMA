@@ -11,6 +11,7 @@ import org.squerall.Helpers._
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.util.control.Breaks.{break, breakable}
 
 class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecutorGraph[Graph[String,String]] {
 
@@ -39,9 +40,14 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
     var vertex: RDD[(VertexId, String)] = null
     var edge: RDD[Edge[String]] = null
     var finalVer: RDD[(VertexId, String)] = null
+    var finalEd: RDD[Edge[String]] = null
     var header: Array[String] = null
     var FinalColumns = ""
     var finalColumns: Array[String] = null
+
+    //for filtering
+    var whereString = ""
+    var nbrOfFiltersOfThisStar = 0
 
     for (s <- sources) {
 
@@ -92,104 +98,111 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
               var head = data.first()
               var datagraph = data.filter(line => line != head)
                 .map(line =>  line.split(","))
+
               if(vertex == null){
-                //extracting vertices
-                vertex =  datagraph.map(line=>((edgeId+"00"+line(0)).toLong,(line(index))))
+                vertex =  datagraph.map(line=>((edgeId+"000"+line(0)).toLong,(line(index))))
                 //extracting edges
-                edge = datagraph.map(line => Edge((edgeId+"00"+line(0)).toLong,(edgeId+"00"+line(0)).toLong,column))
+                edge = datagraph.map(line => Edge((edgeId+"000"+line(0)).toLong,(edgeId+"000"+line(0)).toLong,column))
               }else{
-                vertex = vertex.union(datagraph
-                  .map(line=>((edgeId+"00"+index+line(0)).toLong,(line(index)))))
+                vertex =  datagraph.map(line=>((edgeId+"000"+index+"000"+line(0)).toLong,(line(index))))
                 //extracting edges
-                edge = edge.union(datagraph
-                  .map((line) => Edge((edgeId+"00"+line(0)).toLong,(edgeId+"00"+index+line(0)).toLong,column)))
+                edge = datagraph.map(line => Edge((edgeId+"000"+line(0)).toLong,(edgeId+"000"+index+"000"+line(0)).toLong,column))
+              }
+              //filtering
+              val it = filters.keySet().iterator()
+              while (it.hasNext) {
+                val value = it.next()
+                val predicate = star_predicate_var.
+                  filter(t => t._2 == value).
+                  keys. // To obtain (star, predicate) pairs having as value the FILTER'ed value
+                  filter(t => t._1 == star).
+                  map(f => f._2).toList
+
+                if (predicate.nonEmpty) {
+                  val ns_p = get_NS_predicate(predicate.head) // Head because only one value is expected to be attached to the same star an same (object) variable
+                  val wherecolumn = omitQuestionMark(star) + "_" + ns_p._2 + "_" + prefixes(ns_p._1)
+
+                  nbrOfFiltersOfThisStar = filters.get(value).size()
+
+                  val conditions = filters.get(value).iterator()
+                  while (conditions.hasNext) {
+                    val operand_value = conditions.next()
+                    whereString = column + operand_value._1 + operand_value._2
+
+                    if(column.equals(wherecolumn)) {
+
+                      if (operand_value._1 != "regex") {
+                        if (isAllDigits(operand_value._2) && operand_value._1.equals("=")) {
+                          vertex = vertex.filter {
+                            case (id, prop) =>
+                              ( prop.toLong == operand_value._2.toLong)
+                            case _ => false
+                          }
+                        } else if (isAllDigits(operand_value._2) && operand_value._1.equals("<")) {
+                          vertex = vertex.filter {
+                            case (id, prop) => prop.toLong < operand_value._2.toLong
+                            case _ => false
+                          }
+                        } else if (isAllDigits(operand_value._2) && operand_value._1.equals(">")) {
+                          vertex = vertex.filter {
+                            case (id, prop) => prop.toLong > operand_value._2.toLong
+                            case _ => false
+                          }
+                        } else if (isAllDigits(operand_value._2) && operand_value._1.equals(">=")) {
+                          vertex = vertex.filter {
+                            case (id, prop) => prop.toLong >= operand_value._2.toLong
+                            case _ => false
+                          }
+                        } else if (isAllDigits(operand_value._2) && operand_value._1.equals("<=")) {
+                          vertex = vertex.filter {
+                            case (id, prop) => prop.toLong <= operand_value._2.toLong
+                            case _ => false
+                          }
+                        } else {
+                          vertex = vertex.filter {
+                            case (id, prop) => prop.equals(operand_value._2.split("\"")(1))
+                            case _ => false
+                          }
+                        }
+                      }
+                      // else  finalGP = finalGP.filter(finalGP(column).like(operand_value._2.replace("\"","")))
+                      // regular expression with _ matching an arbitrary character and % matching an arbitrary sequence
+                    }
+                  }
+                }
+              }
+
+              if(finalVer == null) {
+                finalVer = vertex
+                finalEd = edge
+              } else{
+                finalVer = finalVer.union(vertex)
+                finalEd = finalEd.union(edge)
               }
           }
           edgeIdMap = Map(str -> Array(edgeId.toString,header.mkString(",")))
         case _ =>
       }
-      if(finalVer == null) {
+      //in case of multiple cases
+      /*if(finalVer == null) {
         finalVer = vertex
       } else{
         finalVer = finalVer.union(vertex)
-      }
-
+      }*/
     }
 
-    var whereString = ""
+    var graph:Graph[String,String] = Graph(finalVer,finalEd)
 
-    var nbrOfFiltersOfThisStar = 0
+    /*val vertex2 =  graph.vertices.filter(v=>v._2 == null)
+    val my2list = vertex2.map(v=>v._1.toString).collect()
+    println("this is my2list")
+    my2list.foreach(println(_))
+    val my3list = graph.edges.filter(e => my2list.contains(e.dstId.toString)).map(e=>e.srcId.toString).collect()
+    println("this is my3list")
+    my3list.foreach(println(_))
+    val edges2: RDD[Edge[String]] = graph.edges.filter(e => !my3list.contains(e.srcId.toString))
 
-    val it = filters.keySet().iterator()
-    while (it.hasNext) {
-      val value = it.next()
-      val predicate = star_predicate_var.
-        filter(t => t._2 == value).
-        keys. // To obtain (star, predicate) pairs having as value the FILTER'ed value
-        filter(t => t._1 == star).
-        map(f => f._2).toList
-
-      if (predicate.nonEmpty) {
-        val ns_p = get_NS_predicate(predicate.head) // Head because only one value is expected to be attached to the same star an same (object) variable
-        val column = omitQuestionMark(star) + "_" + ns_p._2 + "_" + prefixes(ns_p._1)
-
-        nbrOfFiltersOfThisStar = filters.get(value).size()
-
-        val conditions = filters.get(value).iterator()
-        while (conditions.hasNext) {
-          val operand_value = conditions.next()
-          whereString = column + operand_value._1 + operand_value._2
-
-          //getting the column values
-          var mylist : mutable.MutableList[Long]=  mutable.MutableList()
-          edge.collect().foreach{
-            case e =>
-              if(e.attr.equals(column)){
-                mylist += e.dstId
-              }
-          }
-
-          if (operand_value._1 != "regex") {
-            if(isAllDigits(operand_value._2)  && operand_value._1.equals("=")){
-              finalVer = finalVer.filter {
-                case (id, prop) => ((mylist.contains(id) && prop.toLong==operand_value._2.toLong) || !mylist.contains(id))
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (mylist.contains(id) && prop.toLong<operand_value._2.toLong || !mylist.contains(id))
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (mylist.contains(id) && prop.toLong>operand_value._2.toLong || !mylist.contains(id))
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">=")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (mylist.contains(id) && prop.toLong>=operand_value._2.toLong || !mylist.contains(id))
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<=")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (mylist.contains(id) && prop.toLong<=operand_value._2.toLong || !mylist.contains(id))
-                case _ => false
-              }
-            }else{
-              finalVer = finalVer.filter {
-                case (id, prop) => (mylist.contains(id) && prop.equals(operand_value._2.split("\"")(1)) || !mylist.contains(id))
-                case _ => false
-              }
-            }
-          }
-          // else  finalGP = finalGP.filter(finalGP(column).like(operand_value._2.replace("\"","")))
-          // regular expression with _ matching an arbitrary character and % matching an arbitrary sequence
-        }
-      }
-    }
-
-    val graph:Graph[String,String] = Graph(finalVer,edge)
-
+    graph  = Graph(graph.vertices,edges2)*/
     stopwatch stop()
     val timeTaken = stopwatch.getTime
     println(s"Time taken by query (extract+filter) method: $timeTaken")
@@ -240,14 +253,14 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
       it.remove()
 
       //getting the added number to the edges ids
-      if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
-        id2 = edgeIdMap(omitQuestionMark(op2))(0)
-        header2 = edgeIdMap(omitQuestionMark(op2))(1)
-      }
+     /* if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
+      //  id2 = edgeIdMap(omitQuestionMark(op2))(0)
+      //  header2 = edgeIdMap(omitQuestionMark(op2))(1)
+      }*/
 
       if (edgeIdMap.keySet.contains(omitQuestionMark(op1)) ){
         id1 = edgeIdMap(omitQuestionMark(op1))(0)
-        header1 = edgeIdMap(omitQuestionMark(op1))(1)
+      //  header1 = edgeIdMap(omitQuestionMark(op1))(1)
       }
 
       if (firstTime) {
@@ -257,12 +270,13 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
         //foreign key
         val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
         //creating the foreign key edges
-        var mytemplist : Array[String]=  Array()
-        mytemplist = graph1.edges.filter(e=>e.attr.equals(fk)).map(e=> e.dstId.toString.substring(1)).collect()
+        var mytemplist = graph1.edges.filter(e=>e.attr.equals(fk)).map(e=> e.dstId.toString.substring(1)).collect()
 
-        val edges: RDD[Edge[String]] = graph1.vertices.filter(v=>mytemplist.contains(v._1.toString.substring(1))).map{ (v) =>
-          Edge((id1+"00"+v._1.toString.substring(4)).toLong,(id2+"00"+v._2).toLong, fk)
-        }
+        val edges: RDD[Edge[String]] = graph1.vertices.filter(v=>mytemplist.contains(v._1.toString.substring(1)))
+          .filter((v)=>v._2!=null)
+          .map{ (v) =>
+            Edge((id1+"000"+v._1.toString.split("000")(2)).toLong,(id2+"000"+v._2).toLong, fk)
+          }
 
         var finalED: RDD[Edge[String]] =  null
         edges.collect().foreach{
@@ -274,21 +288,7 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
             }
         }
 
-        //filtering vertices
-        val finalVR = graph2.vertices.union(graph1.vertices)
-        val my2list = finalVR.filter(v=>v._2 == null).map(v=>v._1.toString).collect()
-        //filering edges
-        finalED = graph1.edges.union(finalED)
-        val my3list = finalED.filter(e => my2list.contains(e.dstId.toString)).map(e=>e.srcId.toString).collect()
-        val edges2: RDD[Edge[String]] = finalED.filter(e => !my3list.contains(e.srcId.toString))
-
-        //creating the graph
-        jGrah = Graph(finalVR,//.filter((v)=>v._2!=null),
-          edges2)
-        //   jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
-
-        println("first joining")
-        jGrah.edges.collect().foreach(println(_))
+        jGrah = Graph(graph1.vertices.union(graph2.vertices),graph1.edges.union(finalED))
 
       } else {
         val dfs_only = seenDF.map(_._1)
@@ -297,22 +297,12 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
           //foreign key
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
           //creating the new edges
-          // val tempEdges: RDD[Edge[String]] =graph1.edges.filter(e=>e.attr.equals(fk))
-          //filtering the edges
-          var mytemplist : Array[String]=  Array()
+          var mytemplist = graph1.edges.filter(e=>e.attr.equals(fk)).map(e=> e.dstId.toString.substring(1)).collect()
 
-          /*   tempEdges.collect().foreach{
-               case e =>
-                 if(!mytemplist.contains(e.dstId.toString.substring(1))){
-                   mytemplist += e.dstId.toString.substring(1)
-                 }
-             }
-             */
-          mytemplist = graph1.edges.filter(e=>e.attr.equals(fk)).map(e=> e.dstId.toString.substring(1)).collect()
-
-          val edges: RDD[Edge[String]] = graph1.vertices.filter(v=>mytemplist.contains(v._1.toString.substring(1))).map{ (v) =>
-            Edge((id1+"00"+v._1.toString.substring(4)).toLong,(id2+"00"+v._2).toLong, fk)
-          }
+          val edges: RDD[Edge[String]] = graph1.vertices.filter(v=>mytemplist.contains(v._1.toString.substring(1))).filter((v)=>v._2!=null).
+            map{ (v) =>
+              Edge((id1+"000"+v._1.toString.split("000")(2)).toLong,(id2+"000"+v._2).toLong, fk)
+            }
 
           var finalED: RDD[Edge[String]] = null
           edges.collect().foreach{
@@ -324,37 +314,20 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
               }
           }
 
-          val finalVR =  jGrah.vertices.union(graph2.vertices)
-          val my2list = finalVR.filter(v=>v._2 ==null).map(v=>v._1.toString).collect()
-          //filtering edges
-          finalED = jGrah.edges.union(finalED)
-          val my3list = finalED.filter(e => my2list.contains(e.dstId.toString)).map(e=>e.srcId.toString).collect()
-          val edges2: RDD[Edge[String]] =finalED.filter(e => !my3list.contains(e.srcId.toString))
-
-          jGrah = Graph(finalVR//.filter((v)=>v._2!=null)
-            ,  edges2)
-
+          jGrah = Graph(jGrah.vertices.union(graph2.vertices),jGrah.edges.union(finalED))
           seenDF.add((op2,"ID"))
 
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
           //foreign key
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-          //creating the new edges
-          // val tempEdges: RDD[Edge[String]] =graph1.edges.filter(e=>e.attr.equals(fk))
           //filtering the edges
-          var mytemplist : Array[String]=  Array()
+          var mytemplist = graph1.edges.filter(e=>e.attr.equals(fk)).map(e=> e.dstId.toString.substring(1)).collect()
 
-          /*   tempEdges.collect().foreach{
-               case e =>
-                 if(!mytemplist.contains(e.dstId.toString.substring(1))){
-                   mytemplist += e.dstId.toString.substring(1)
-                 }
-             }
-             */
-          mytemplist = graph1.edges.filter(e=>e.attr.equals(fk)).map(e=> e.dstId.toString.substring(1)).collect()
-          val edges: RDD[Edge[String]] = graph1.vertices.filter(v=>mytemplist.contains(v._1.toString.substring(1))).map{ (v) =>
-            Edge((id1+"00"+v._1.toString.substring(4)).toLong,(id2+"00"+v._2).toLong, fk)
-          }
+          val edges: RDD[Edge[String]] = graph1.vertices.filter(v=>mytemplist.contains(v._1.toString.substring(1)))
+            .filter((v)=>v._2!=null)
+            .map{ (v) =>
+              Edge((id1+"000"+v._1.toString.split("000")(2)).toLong,(id2+"000"+v._2).toLong, fk)
+            }
 
           var finalED: RDD[Edge[String]] = null
           edges.collect().foreach{
@@ -366,15 +339,7 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
               }
           }
 
-          val finalVR =  jGrah.vertices.union(graph1.vertices)
-          val my2list = finalVR.filter(v=>v._2 == null).map(v=>v._1.toString).collect()
-          //filtering edges
-          finalED = graph1.edges.union(finalED)
-          val my3list = finalED.filter(e => my2list.contains(e.dstId.toString)).map(e=>e.srcId.toString).collect()
-          val edges2: RDD[Edge[String]] = finalED.filter(e => !my3list.contains(e.srcId.toString))
-
-          jGrah = Graph(finalVR,//.filter((v)=>v._2!=null),
-            edges2)
+          jGrah = Graph(jGrah.vertices.union(graph1.vertices),graph1.edges.union(finalED))
           seenDF.add((op1,jVal))
 
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
@@ -511,6 +476,15 @@ class GraphExecutor (sparkURI: String, mappingsFile: String) extends QueryExecut
         })
       }
     }
+
+    val vertex = jGP.vertices.filter(v=>v._2 == null)
+    val my2list = vertex.map(v=>v._1.toString).collect()
+    println("this is my2list")
+    my2list.foreach(println(_))
+    val my3list = edges.filter(e => my2list.contains(e.dstId.toString)).map(e=>e.srcId.toString).collect()
+    println("this is my3list")
+    my3list.foreach(println(_))
+    edges = edges.filter(e => !my3list.contains(e.srcId.toString))
 
     if(distinct){
       jGP = Graph(
