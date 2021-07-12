@@ -321,8 +321,12 @@ class Run[A] (executor: QueryExecutor[A]) {
     }
 
     logger.info("|__ Has distinct? " + distinct)
+    val stopwatch: StopWatch = new StopWatch
+    stopwatch start()
     finalDataSet = executor.project(finalDataSet, columnNames, distinct)
-
+    stopwatch stop()
+    val timeTaken = stopwatch.getTime
+    println(s"Time taken by projection method: $timeTaken")
     if (limit > 0)
       finalDataSet = executor.limit(finalDataSet, limit)
 

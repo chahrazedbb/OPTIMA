@@ -38,6 +38,10 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
               edgeId:Int
              ): (DataFrame, Integer, String, Map[String, Int], Any) = {
 
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
+
+
         val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
         //TODO: get from the function if there is a relevant data source that requires setting config to SparkSession
 
@@ -192,6 +196,10 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         // logger.info("Number of Spark executors (JUST FOR TEST): " + spark.sparkContext.statusTracker.getExecutorInfos.length)
         // logger.info("Master URI (JUST FOR TEST): " + spark.sparkContext.master)
 
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"Time taken by query (extract + filter) method: $timeTaken")
+
         (finalDF, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, null)
     }
 
@@ -250,6 +258,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
              prefixes: Map[String, String], star_df: Map[String, DataFrame],
              edgeIdMap: Map[String,Int],
              sc: Any): DataFrame = {
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
         import scala.collection.JavaConversions._
         import scala.collection.mutable.ListBuffer
 
@@ -392,6 +402,10 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             pendingJoins = pendingJoins.tail
         }
 
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"Time taken by join method: $timeTaken")
+
         jDF
     }
 
@@ -530,6 +544,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             jDF.asInstanceOf[DataFrame].select(columnNames.head, columnNames.tail: _*)
         else
             jDF.asInstanceOf[DataFrame].select(columnNames.head, columnNames.tail: _*).distinct()
+
     }
 
     def schemaOf(jDF: DataFrame): Unit = {
@@ -578,6 +593,9 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
     def limit(jDF: Any, limitValue: Int) : DataFrame = jDF.asInstanceOf[DataFrame].limit(limitValue)
 
     def show(jDF: Any): Unit = {
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
+
         val columns = ArrayBuffer[String]()
         //jDF.asInstanceOf[DataFrame].show
         val df = jDF.asInstanceOf[DataFrame]
@@ -590,6 +608,10 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         df.take(20).foreach(x => println(x))
 
         println(s"Number of results: ${jDF.asInstanceOf[DataFrame].count()}")
+
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"Time taken by show method: $timeTaken")
     }
 
     def run(jDF: Any): Unit = {
