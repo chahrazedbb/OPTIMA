@@ -69,17 +69,21 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       sourceType match {
         case "csv" =>
           val data = sc.textFile(sourcePath)
+          //getting the header
           header = data.first()
+
+          //getting data
           vertex =  data.filter(line => line != header)
             .map(line =>  line.split(","))
             .map( parts => ((edgeId+"00"+parts.head).toLong, parts.tail))
+
+          //getting column names
           val mycolumns = columns.split(",")
           val toRemove = "`".toSet
           myheader = header.split(",")
-
           mycolumns.foreach(col =>
             if(myheader.contains(col.split("AS")(0).filterNot(toRemove).trim)) {
-              var  i = myheader.indexOf(col.split("AS")(0).filterNot(toRemove).trim)
+              val  i = myheader.indexOf(col.split("AS")(0).filterNot(toRemove).trim)
               myheader(i) = col.split("AS")(1).filterNot(toRemove).trim
             }
           )
@@ -91,7 +95,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       } else{
         finalVer = finalVer.union(vertex)
       }
-
     }
 
     var whereString = ""
@@ -117,8 +120,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         while (conditions.hasNext) {
           val operand_value = conditions.next()
           whereString = column + operand_value._1 + operand_value._2
-          println("whereString : " + whereString)
-          println("this th yyyyy " + column + "........  " + myheader)
+          //getting the column index in the table
           val colIndex = myheader.indexOf(column)-1
 
           if (operand_value._1 != "regex") {
@@ -161,12 +163,9 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       }
     }
 
-    //creating the edges
-    val edge: RDD[Edge[String]] =finalVer
-      .map{ (v) =>
-        Edge(v._1,v._1, "id")
-      }
-
+    //creating temp edges
+    val edge: RDD[Edge[String]] = finalVer.map{(v) => Edge(v._1,v._1, "id")}
+    //creating graphs
     var graph:Graph[Array[String],String] = Graph(finalVer,edge)
 
     (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
@@ -231,17 +230,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         //getting the fk column
         val colIndex = header1.split(",").indexOf(fk)-1
         //creating the edges
-        val edges: RDD[Edge[String]] =vertex1
-          .map{ (v) =>
-            Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
-          }
+        val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
         //creating the graph
-        jGrah = Graph(vertex1.union(vertex2).filter((v)=>v._2!=null), edges)
+        jGrah = Graph(vertex1.union(vertex2).filter((v)=>v._2!=null)
+           , edges)
         jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
-
-        println("first joining edges ")
-        jGrah.edges.collect().foreach(println(_))
-
       } else {
         val dfs_only = seenDF.map(_._1)
 
@@ -251,49 +244,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //getting the fk column
           val colIndex = header1.split(",").indexOf(fk)-1
           //creating the edges
-          val edges: RDD[Edge[String]] =vertex1
-            .map{ (v) =>
-              Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
-            } //creating the graph
-
-          var mylist : mutable.MutableList[Long]=  mutable.MutableList()
-          jGrah.edges.collect().foreach{
-            case e =>
-              if(!mylist.contains(e.dstId)){
-                mylist += e.dstId
-              }
-              if(!mylist.contains(e.srcId)){
-                mylist += e.srcId
-              }
-          }
-          var finalED: RDD[Edge[String]] = edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId))
-
-          println("result final ed 1")
-          finalED.collect().foreach(println(_))
-          println("result array 1" + mylist.mkString(", "))
-
-          var mylist2 : mutable.MutableList[Long] =  mutable.MutableList()
-          finalED.collect().foreach{
-            case e =>
-              if(!mylist2.contains(e.dstId)){
-                mylist2 += e.dstId
-              }
-              if(!mylist2.contains(e.srcId)){
-                mylist2 += e.srcId
-              }
-          }
-
-          finalED = finalED.union(jGrah.edges.filter(e => mylist2.contains(e.dstId) || mylist2.contains(e.srcId)))
-
-          println("result final ed 2")
-          finalED.collect().foreach(println(_))
-          println("result array 2" + mylist.mkString(", "))
-
-          jGrah = Graph(jGrah.vertices.union(vertex2), finalED)
+          val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
+          //creating the graph
+          jGrah = Graph(jGrah.vertices.union(vertex2).filter((v)=>v._2!=null)
+            , jGrah.edges.union(edges))
           jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
-
-          println("2 joining edges ")
-          jGrah.edges.collect().foreach(println(_))
           seenDF.add((op2,"ID"))
 
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
@@ -302,51 +257,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //getting the fk column
           val colIndex = header1.split(",").indexOf(fk)-1
           //creating the edges
-          val edges: RDD[Edge[String]] =vertex1
-            .map{ (v) =>
-              Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
-            }
-
-          var mylist : mutable.MutableList[Long]=  mutable.MutableList()
-          jGrah.edges.collect().foreach{
-            case e =>
-              if(!mylist.contains(e.dstId)){
-                mylist += e.dstId
-              }
-              if(!mylist.contains(e.srcId)){
-                mylist += e.srcId
-              }
-          }
-
-          var finalED: RDD[Edge[String]] = edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId))
-
-          println("result final ed 1")
-          finalED.collect().foreach(println(_))
-          println("result array 1" + mylist.mkString(", "))
-
-          var mylist2 : mutable.MutableList[Long] =  mutable.MutableList()
-
-          finalED.collect().foreach{
-            case e =>
-              if(!mylist2.contains(e.dstId)){
-                mylist2 += e.dstId
-              }
-              if(!mylist2.contains(e.srcId)){
-                mylist2 += e.srcId
-              }
-          }
-
-          finalED = finalED.union(jGrah.edges.filter(e => mylist2.contains(e.dstId) || mylist2.contains(e.srcId)))
-
-          println("result final ed 2")
-          finalED.collect().foreach(println(_))
-          println("result array 2" + mylist.mkString(", "))
-
-          jGrah = Graph(jGrah.vertices.union(vertex1).filter((v)=>v._2!=null), finalED)
+          val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)}
+          jGrah = Graph(jGrah.vertices.union(vertex1).filter((v)=>v._2!=null)
+            , jGrah.edges.union(edges))
           jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
 
-          println("3 joining edges ")
-          jGrah.edges.collect().foreach(println(_))
           seenDF.add((op1,jVal))
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
           pendingJoins.enqueue((op1, (op2, jVal)))
@@ -374,10 +289,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       var header1 : String = ""
       var header2 : String = ""
 
-
-      println("hi there 00")
-
-
       //getting the added number to the edges ids
       if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
         id2 = edgeIdMap(omitQuestionMark(op2))(0)
@@ -391,87 +302,28 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
       //getting the added number to the edges ids
       if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-        println("hi there 11")
         //foreign key
         val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
         //getting the fk column
         val colIndex = header1.split(",").indexOf(fk)-1
         //creating the edges
-        val edges: RDD[Edge[String]] =vertex1
-          .map{ (v) =>
-            Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
-          }
-
-        var mylist : mutable.MutableList[Long]=  mutable.MutableList()
-        jGrah.edges.collect().foreach{
-          case e =>
-            mylist += e.dstId
-            mylist += e.srcId
-        }
-        var finalED: RDD[Edge[String]] = edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId))
-
-        println("result final ed 1")
-        finalED.collect().foreach(println(_))
-        println("result array 1" + mylist.mkString(", "))
-
-        mylist =  mutable.MutableList()
-        finalED.collect().foreach{
-          case e =>
-            mylist += e.dstId
-            mylist += e.srcId
-        }
-
-        finalED = finalED.union(jGrah.edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId)))
-
-        println("result final ed 2")
-        finalED.collect().foreach(println(_))
-        println("result array 2" + mylist.mkString(", "))
-
+        val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
         //creating the graph
-        jGrah = Graph(jGrah.vertices.union(vertex2), finalED)
+        jGrah = Graph(jGrah.vertices.union(vertex2).filter((v)=>v._2!=null)
+          , jGrah.edges.union(edges))
         jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+
       } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
-        println("hi there 22")
-
         //foreign key
         val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
         //getting the fk column
         val colIndex = header1.split(",").indexOf(fk)-1
         //creating the edges
-
-        val edges: RDD[Edge[String]] =vertex1
-          .map{ (v) =>
-            Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)
-          }
-
-        var mylist : mutable.MutableList[Long]=  mutable.MutableList()
-        jGrah.edges.collect().foreach{
-          case e =>
-            mylist += e.dstId
-            mylist += e.srcId
-        }
-        var finalED: RDD[Edge[String]] = edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId))
-
-        println("result final ed 1")
-        finalED.collect().foreach(println(_))
-        println("result array 1" + mylist.mkString(", "))
-
-        mylist =  mutable.MutableList()
-        finalED.collect().foreach{
-          case e =>
-            mylist += e.dstId
-            mylist += e.srcId
-        }
-
-        finalED = finalED.union(jGrah.edges.filter(e => mylist.contains(e.dstId) || mylist.contains(e.srcId)))
-
-        println("result final ed 2")
-        finalED.collect().foreach(println(_))
-        println("result array 2" + mylist.mkString(", "))
-
-        //creating the graph
-        jGrah = Graph(jGrah.vertices.union(vertex1), finalED)
+        val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)}
+        jGrah = Graph(jGrah.vertices.union(vertex1).filter((v)=>v._2!=null)
+          , jGrah.edges.union(edges))
         jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+
       } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
         println("hi there 33")
 
@@ -482,98 +334,56 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     jGrah
   }
 
-  def project(jDF: Any, columnNames: Seq[String],  edgeIdMap: Map[String,Array[String]],distinct: Boolean): Graph[Array[String], String] = {
+  def project(jDF: Any,
+              columnNames: Seq[String],
+              edgeIdMap: Map[String,Array[String]],
+              distinct: Boolean): Graph[Array[String], String] = {
+
     var jGP = jDF.asInstanceOf[Graph[Array[String],String]]
-    var mycol: mutable.MutableList[String]= mutable.MutableList.empty
-    var triples: RDD[String] = null
-    var temp:Array[Array[String]] =  Array.ofDim[String](3, 20)
-    var num = 0
 
-
-    println("cccccccccccccccccccccccccccccc")
-    columnNames.foreach(println(_))
+    var columnIndexList: Map[String,String]= Map.empty
+    var vertex: RDD[(VertexId, Array[String])] = null
 
     //getting columns index
     edgeIdMap.values.foreach{
-      case v =>
+      case headers =>
         columnNames.foreach{
-          c=>
-            if(v(1).split(",").contains(c) && !mycol.contains(v(0) + "," + v.indexOf(c))){
-              val num : Long = v(1).split(",").indexOf(c)-1
-              mycol += v(0) + "," + num
-              println("  -------------- " + c + "----------- " + num)
+          column=>
+            if(headers(1).split(",").contains(column) && !columnIndexList.contains(headers(0) + "," + headers.indexOf(column))){
+              val num : Long = headers(1).split(",").indexOf(column)-1
+              if(columnIndexList.keySet.contains(headers(0))){
+                val x = columnIndexList(headers(0))
+                columnIndexList += (headers(0) ->( x + "," + num))
+              }else{
+                columnIndexList += (headers(0) -> num.toString)
+              }
+
             }
         }
     }
 
-    triples = jGP.triplets.map(triplet => {
-      "["+ triplet.srcAttr.mkString(",") + "] is the " + triplet.attr + " of ["  + triplet.dstAttr.mkString(",") + "]"
-    })
-    triples.distinct.collect().foreach(println(_))
+    println("saliha saliha saliha")
 
-    if(distinct){
-      mycol.foreach{
-        m =>
-          triples = jGP.triplets.map(triplet => {
-            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.srcAttr(m.split(",")(1).toInt)
-            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.dstAttr(m.split(",")(1).toInt)
-            }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
-              triplet.srcId.toString
-            }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
-              triplet.dstId.toString
-            }else{
-              "No results found"
-            }
-          }
-          )
-          temp(num) = triples.distinct().collect().sortBy(_(0))
-          num = num + 1
-        //triples.distinct().collect.sortBy(_(0)).foreach(println(_))
-
-      }
-      println("*****************************")
-      println("last results : ")
-      for(j<-0 to temp(0).length-1){
-        print(j + "= [")
-
-        for(i<-0 to num-1)
-        {
-          //Accessing the elements
-          print( temp(i)(j) + ", ")
+    columnIndexList.foreach {
+      index =>
+        println(index._1 + "..." + index._2)
+        if(vertex==null){
+          vertex = jGP.vertices.filter( v=>
+            ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
+            .map(v=>(v._1,
+             index._2.split(",").map({i=>v._2(i.toInt)}).toArray
+            ))
+        }else{
+          vertex = vertex.union(jGP.vertices.filter( v=>
+            ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
+            .map(v=>(v._1,
+              index._2.split(",").map({i=>v._2(i.toInt)}).toArray
+            )))
         }
-
-        print("]")
-        println()
-      }
-
-    }else{
-      mycol.foreach{
-        m =>
-          triples = jGP.triplets.map(triplet => {
-            if ((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.srcAttr(m.split(",")(1).toInt)
-            }else if ((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))
-              && m.split(",")(1).toInt > -1){
-              triplet.dstAttr(m.split(",")(1).toInt)
-            }else if((m.split(",")(0)+"00").equals(triplet.srcId.toString.take(3))){
-              triplet.srcId.toString
-            }else if((m.split(",")(0)+"00").equals(triplet.dstId.toString.take(3))){
-              triplet.dstId.toString
-            }else{
-              "No results found"
-            }
-          }
-          )
-      }
-      println("last results : ")
-      // triples.collect.foreach(println(_))
-      triples.collect.sortBy(_(0)).foreach(println(_))
     }
+
+    jGP = Graph(vertex,jGP.edges)
+
     jGP
   }
 
@@ -592,7 +402,15 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
   }
 
   def show(PS: Any): Unit = {
-    val graph = PS.asInstanceOf[Graph[Array[String],String]]
+    var graph = PS.asInstanceOf[Graph[Array[String],String]]
+    graph = Graph(graph.vertices.filter((v)=>v._2!=null)
+      ,graph.edges)
+    graph = graph.subgraph(vpred = (vid,vd)=>vd!=null)
+
+    graph.triplets.
+      map(triplet =>"["+ triplet.srcAttr.mkString(",") + "," + triplet.dstAttr.mkString(",") + "]")
+      .collect()
+      .foreach(println(_))
     println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
   }
 

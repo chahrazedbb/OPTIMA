@@ -30,9 +30,9 @@ object Main extends App {
         val run = new Run[DataQueryFrame](executor)
         run.application(queryFile,mappingsFile,configFile,executorID)
 
-    } else if(queryEngine == "g") { // Spark GraphX as query engine
-        val executor : GraphExecutor = new GraphExecutor(executorID, mappingsFile)
-        val run = new RunGraph[Graph[String,String]](executor)
+    }  else if(queryEngine == "g") { // Spark GraphX as query engine
+        val executor : SparkGraphxExecutor = new SparkGraphxExecutor(executorID, mappingsFile)
+        val run = new RunGraph[Graph[Array[String],String]](executor)
         run.application(queryFile,mappingsFile,configFile,executorID)
     }
 
