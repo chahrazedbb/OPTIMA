@@ -2,9 +2,9 @@ package org.squerall
 
 import java.sql.DriverManager
 import java.util
-
 import com.google.common.collect.ArrayListMultimap
 import com.typesafe.scalalogging.Logger
+import org.apache.commons.lang.time.StopWatch
 import org.apache.spark.sql.DataFrame
 import org.squerall.Helpers._
 import org.squerall.model.DataQueryFrame
@@ -79,7 +79,14 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
 
             var table = ""
             sourceType match {
-                case "csv" => table = s"hive.default.$entity" // get entity
+                case "csv" =>
+                    val stopwatch: StopWatch = new StopWatch
+                    stopwatch start()
+                    table = s"hive.default.$entity" // get entity
+                    stopwatch stop()
+                    val timeTaken = stopwatch.getTime
+                    println(s"++++++ loading time : $timeTaken")
+
                 case "parquet" => table = s"hive.default.$entity" // get entity
                 case "cassandra" => table = s"""cassandra.${options("keyspace")}.${options("table")}"""
                 case "elasticsearch" => table = ""
@@ -112,6 +119,8 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
 
         logger.info("- filters: " + filters + " ======= " + star)
 
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
         var whereString = ""
 
         var nbrOfFiltersOfThisStar = 0
@@ -148,6 +157,10 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
                 //finalDF.show()
             }
         }
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"++++++ filter time : $timeTaken")
+
         logger.info(s"Number of filters of this star is: $nbrOfFiltersOfThisStar")
 
         (finalDQF, nbrOfFiltersOfThisStar, "", null, null)
@@ -222,6 +235,9 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
              star_df: Map[String, DataQueryFrame],
              edgeIdMap: Map[String,Int],
              sc: Any): DataQueryFrame = {
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
+
         import scala.collection.JavaConversions._
         import scala.collection.mutable.ListBuffer
 
@@ -339,6 +355,10 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
             if(transformations.nonEmpty) jDQF.addTransformations(transformations)
         }
 
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"++++++ joining time : $timeTaken")
+
         jDQF
     }
 
@@ -347,10 +367,22 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
     }
 
     def project(jDQF: Any, columnNames: Seq[String], distinct: Boolean) : DataQueryFrame = {
-        if(!distinct)
+        if(!distinct) {
+
+            val stopwatch: StopWatch = new StopWatch
+            stopwatch start()
             jDQF.asInstanceOf[DataQueryFrame].addProject((columnNames, false))
-        else
+            stopwatch stop()
+            val timeTaken = stopwatch.getTime
+            println(s"++++++ projection time : $timeTaken")
+        } else {
+            val stopwatch: StopWatch = new StopWatch
+            stopwatch start()
             jDQF.asInstanceOf[DataQueryFrame].addProject((columnNames, true))
+            stopwatch stop()
+            val timeTaken = stopwatch.getTime
+            println(s"++++++ projection time : $timeTaken")
+        }
 
         jDQF.asInstanceOf[DataQueryFrame]
     }
@@ -407,6 +439,9 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
     }
 
     def show(jDQF: Any) = {
+
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
         val selects: mutable.Seq[(String, String, String)] = jDQF.asInstanceOf[DataQueryFrame].getSelects
         val joins: mutable.Seq[(String, String, String, String)] = jDQF.asInstanceOf[DataQueryFrame].getJoins
         val filters: mutable.Seq[String] = jDQF.asInstanceOf[DataQueryFrame].getFilters
@@ -520,6 +555,11 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
 
         logger.info(s"\nQuery:\n$query")
         this.query = query
+
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"++++++ show time : $timeTaken")
+
     }
 
     def run(jDF: Any) = {
@@ -536,7 +576,7 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
             val metadata = resultSet.getMetaData
             val columnCount = metadata.getColumnCount
 
-            // Printing schema
+            // Printing schemas
             print("\nResults (showing first 20):\n")
             for (i <- 1 to columnCount) {
                 val name = metadata.getColumnName(i)

@@ -8,11 +8,13 @@ import org.apache.spark.graphx.{Edge, Graph, VertexId}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.squerall.Helpers._
+import org.graphframes._
+import org.apache.spark.sql.functions.col
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecutorGraph[Graph[Array[String],String]] {
+class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryExecutorGraph[Graph[Array[String],String]] {
 
   def query(sources: mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
             optionsMap_entity: mutable.HashMap[String, (Map[String, String], String)],
@@ -38,6 +40,9 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var myheader: Array[String] = null
     var header = ""
     var FinalColumns = ""
+
+    //gph frame
+    var vertexx: DataFrame = null
 
     for (s <- sources) {
 
@@ -71,6 +76,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         case "csv" =>
           val stopwatch: StopWatch = new StopWatch
           stopwatch start()
+
+          vertexx = spark.read.options(options).csv(sourcePath)
 
           val data = sc.textFile(sourcePath)
           //getting the header
@@ -181,6 +188,26 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     val edge: RDD[Edge[String]] = finalVer.map{(v) => Edge(v._1,v._1, "id")}
     //creating graphs
     var graph:Graph[Array[String],String] = Graph(finalVer,edge)
+    //creating the graph frame
+    /**
+     * val vertex = spark.read.option("header","true").load("csvgraph1_vertex.csv")
+     * val edges = spark.read.option("header","true").load("csvgraph1_edges.csv")
+     * val graph = GraphFrame(vertex, edges)
+     */
+    var newEdge = vertexx.select(col("id").alias("src"),
+      col("id").alias("dst"),
+      col(header.split(",")(1)).alias("relationship"))
+
+    val graphFrame = GraphFrame(vertexx,newEdge)
+    println("this is grapphFrames")
+    graphFrame.vertices.show()
+    graphFrame.edges.show()
+    graphFrame.triplets.show()
+
+    val graphFrame2 = GraphFrame.fromGraphX(graph)
+    graphFrame2.vertices.show()
+    graphFrame2.edges.show()
+    graphFrame2.triplets.show()
 
     (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
   }
@@ -250,7 +277,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
         //creating the graph
         jGrah = Graph(vertex1.union(vertex2).filter((v)=>v._2!=null)
-           , edges)
+          , edges)
         jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
       } else {
         val dfs_only = seenDF.map(_._1)
@@ -400,7 +427,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           vertex = jGP.vertices.filter( v=>
             ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
             .map(v=>(v._1,
-             index._2.split(",").map({i=>v._2(i.toInt)})
+              index._2.split(",").map({i=>v._2(i.toInt)})
             ))
         }else{
           vertex = vertex.union(jGP.vertices.filter( v=>
@@ -451,8 +478,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     val stopwatch: StopWatch = new StopWatch
     stopwatch start()
     var graph = PS.asInstanceOf[Graph[Array[String],String]]
-   //graph = Graph(graph.vertices.filter((v)=>v._2!=null),graph.edges)
-   // graph = graph.subgraph(vpred = (vid,vd)=>vd!=null)
+    //graph = Graph(graph.vertices.filter((v)=>v._2!=null),graph.edges)
+    // graph = graph.subgraph(vpred = (vid,vd)=>vd!=null)
     var att = ""
     graph.edges.collect.foreach(e=> att = e.attr)
     if(!att.equals("id")){

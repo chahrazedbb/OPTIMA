@@ -189,11 +189,11 @@ class Run[A] (executor: QueryExecutor[A]) {
 
         sc = scc
 
-        if(edgeIdMap.isEmpty){
+       /* if(edgeIdMap.isEmpty){
           edgeIdMap = mymap
         }else{
           edgeIdMap = edgeIdMap ++ mymap
-        }
+        }*/
 
 
         if (parsetID != "")
@@ -316,7 +316,12 @@ class Run[A] (executor: QueryExecutor[A]) {
         val variable = o._1
         val direction = o._2
 
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
         finalDataSet = executor.orderBy(finalDataSet, direction, variable, sc)
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"++++++ orderby time : $timeTaken")
       }
     }
 
@@ -326,9 +331,16 @@ class Run[A] (executor: QueryExecutor[A]) {
     finalDataSet = executor.project(finalDataSet, columnNames, distinct)
     stopwatch stop()
     val timeTaken = stopwatch.getTime
-    println(s"Time taken by projection method: $timeTaken")
-    if (limit > 0)
+    println(s"++++++ projection time : $timeTaken")
+    if (limit > 0) {
+      val stopwatch: StopWatch = new StopWatch
+      stopwatch start()
       finalDataSet = executor.limit(finalDataSet, limit)
+      stopwatch stop()
+      val timeTaken = stopwatch.getTime
+      println(s"++++++ orderby time : $timeTaken")
+
+    }
 
     //val stopwatch: StopWatch = new StopWatch
     //stopwatch start()

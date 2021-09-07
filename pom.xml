@@ -22,6 +22,7 @@
     </properties>
 
     <dependencies>
+
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-graphx_2.11</artifactId>

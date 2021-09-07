@@ -38,9 +38,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
               edgeId:Int
              ): (DataFrame, Integer, String, Map[String, Int], Any) = {
 
-        val stopwatch: StopWatch = new StopWatch
-        stopwatch start()
-
 
         val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
         //TODO: get from the function if there is a relevant data source that requires setting config to SparkSession
@@ -89,7 +86,14 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
             var df : DataFrame = null
             sourceType match {
-                case "csv" => df = spark.read.options(options).csv(sourcePath)
+                case "csv" =>
+                    val stopwatch: StopWatch = new StopWatch
+                    stopwatch start()
+                        df = spark.read.options(options).csv(sourcePath)
+                    stopwatch stop()
+                    val timeTaken = stopwatch.getTime
+                    println(s"++++++ loading time : $timeTaken")
+
                 case "parquet" => df = spark.read.options(options).parquet(sourcePath)
                 case "cassandra" =>
                     df = spark.read.format("org.apache.spark.sql.cassandra").options(options).load
@@ -149,6 +153,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
         logger.info("- filters: " + filters + " for star " + star)
 
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
         var whereString = ""
 
         var nbrOfFiltersOfThisStar = 0
@@ -190,15 +196,15 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             }
         }
 
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        println(s"++++++ filter time : $timeTaken")
+
         logger.info(s"Number of filters of this star is: $nbrOfFiltersOfThisStar")
 
         /*******THIS IS JUST FOR TEST*******/
         // logger.info("Number of Spark executors (JUST FOR TEST): " + spark.sparkContext.statusTracker.getExecutorInfos.length)
         // logger.info("Master URI (JUST FOR TEST): " + spark.sparkContext.master)
-
-        stopwatch stop()
-        val timeTaken = stopwatch.getTime
-        println(s"Time taken by query (extract + filter) method: $timeTaken")
 
         (finalDF, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, null)
     }
@@ -258,6 +264,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
              prefixes: Map[String, String], star_df: Map[String, DataFrame],
              edgeIdMap: Map[String,Int],
              sc: Any): DataFrame = {
+
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
         import scala.collection.JavaConversions._
@@ -404,7 +411,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
         stopwatch stop()
         val timeTaken = stopwatch.getTime
-        println(s"Time taken by join method: $timeTaken")
+        println(s"++++++ joining time : $timeTaken")
 
         jDF
     }
@@ -605,7 +612,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             columns += col.name
 
         println(columns.mkString(","))
-        df.take(20).foreach(x => println(x))
+        df.foreach(x => println(x))
 
         println(s"Number of results: ${jDF.asInstanceOf[DataFrame].count()}")
 
