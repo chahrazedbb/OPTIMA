@@ -151,6 +151,9 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             }
         }
 
+     // println("this is is is is clumns of finaldf " + finalDF.columns.mkString(","))
+     // finalDF.show(20)
+
         logger.info("- filters: " + filters + " for star " + star)
 
         val stopwatch: StopWatch = new StopWatch
@@ -206,7 +209,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         // logger.info("Number of Spark executors (JUST FOR TEST): " + spark.sparkContext.statusTracker.getExecutorInfos.length)
         // logger.info("Master URI (JUST FOR TEST): " + spark.sparkContext.master)
 
-        (finalDF, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, null)
+      (finalDF, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, null)
     }
 
     def transform(df: Any, column: String, transformationsArray : Array[String]): DataFrame = {
@@ -605,7 +608,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
         val columns = ArrayBuffer[String]()
         //jDF.asInstanceOf[DataFrame].show
-        val df = jDF.asInstanceOf[DataFrame]
+        val df = jDF.asInstanceOf[DataFrame].limit(20)
         //df.printSchema()
         val schema = df.schema
         for (col <- schema)

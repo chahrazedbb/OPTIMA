@@ -2,22 +2,30 @@ package org.squerall
 
 import java.util
 import com.google.common.collect.ArrayListMultimap
+import com.mongodb.spark.config.ReadConfig
+import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
-import org.apache.spark.SparkContext
-import org.apache.spark.graphx.{Edge, Graph, VertexId}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, SparkSession}
+import org.graphframes.GraphFrame
 import org.squerall.Helpers._
-import org.graphframes._
-import org.apache.spark.sql.functions.col
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
-class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryExecutorGraph[Graph[Array[String],String]] {
+class GraphFrameExecutor(sparkURI: String, mappingsFile: String) extends QueryExecutor[GraphFrame] {
 
-  def query(sources: mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
-            optionsMap_entity: mutable.HashMap[String, (Map[String, String], String)],
+  val logger = Logger("Squerall")
+
+  def getType: DataFrame = {
+    val dataframe : DataFrame = null
+    dataframe
+  }
+
+  def query(sources : mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
+            optionsMap_entity: mutable.HashMap[String, (Map[String, String],String)],
             toJoinWith: Boolean,
             star: String,
             prefixes: Map[String, String],
@@ -27,33 +35,39 @@ class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryE
             filters: ArrayListMultimap[String, (String, String)],
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
-            joinPairs: Map[(String, String), String], edgeId: Int):
-  (Graph[Array[String],String],Integer,String,Map[String,Array[String]],Any)  = {
+            joinPairs: Map[(String,String), String],
+            edgeId:Int
+           ): (GraphFrame, Integer, String, Map[String, Int], Any) = {
+
 
     val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
-    val sc = spark.sparkContext
-    var edgeIdMap : Map[String, Array[String]] = Map.empty
-    var dataSource_count = 0
-    var parSetId = ""
-    var vertex: RDD[(VertexId, Array[String])] = null
-    var finalVer: RDD[(VertexId, Array[String])] = null
-    var myheader: Array[String] = null
-    var header = ""
-    var FinalColumns = ""
+    //TODO: get from the function if there is a relevant data source that requires setting config to SparkSession
 
-    //gph frame
-    var vertexx: DataFrame = null
+    var finalDF : DataFrame = null
+    var graphFrame : GraphFrame = null
+    var finalGph : GraphFrame = null
+    var dataSource_count = 0
+    var parSetId = "" // To use when subject (thus ID) is projected out in SELECT
+    var columns = ""
+    var edgeIdMap : Map[String, Int] = Map.empty
+    var header : Array[String] = null
+
+    val stopwatch1: StopWatch = new StopWatch
+    stopwatch1 start()
 
     for (s <- sources) {
-
+      logger.info("NEXT SOURCE...")
       dataSource_count += 1 // in case of multiple relevant data sources to union
 
       val attr_predicate = s._1
+      logger.info("Star: " + star)
+      logger.info("Attribute_predicate: " + attr_predicate)
       val sourcePath = s._2
       val sourceType = getTypeFromURI(s._3)
       val options = optionsMap_entity(sourcePath)._1 // entity is not needed here in SparkExecutor
 
-      var columns = getSelectColumnsFromSet(attr_predicate, omitQuestionMark(star), prefixes, select, star_predicate_var, neededPredicates, filters)
+      // TODO: move to another class better
+      columns = getSelectColumnsFromSet(attr_predicate, omitQuestionMark(star), prefixes, select, star_predicate_var, neededPredicates, filters)
 
       val str = omitQuestionMark(star)
 
@@ -62,55 +76,104 @@ class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryE
         columns = s"$parSetId AS `$str`, " + columns
       }
 
+      logger.info("Relevant source (" + dataSource_count + ") is: [" + sourcePath + "] of type: [" + sourceType + "]")
+
+      logger.info(s"...from which columns ($columns) are going to be projected")
+      logger.info(s"...with the following configuration options: $options" )
+
       if (toJoinWith) { // That kind of table that is the 1st or 2nd operand of a join operation
         val id = getID(sourcePath, mappingsFile)
+        logger.info(s"...is to be joined with using the ID: ${str}_id (obtained from subjectMap)")
         if (columns == "") {
           columns = id + " AS " + str + "_ID"
         } else
           columns = columns + "," + id + " AS " + str + "_ID"
       }
 
-      println("those are columns " + columns)
+      logger.info("sourceType: " + sourceType)
 
+      var df : DataFrame = null
       sourceType match {
         case "csv" =>
-          val stopwatch: StopWatch = new StopWatch
-          stopwatch start()
-
-          vertexx = spark.read.options(options).csv(sourcePath)
-
-          val data = sc.textFile(sourcePath)
-          //getting the header
-          header = data.first()
-
-          //getting data
-          vertex =  data.filter(line => line != header)
-            .map(line =>  line.split(","))
-            .map( parts => ((edgeId+"00"+parts.head).toLong, parts.tail))
-
-          //getting column names
-          val mycolumns = columns.split(",")
+          df = spark.read.options(options).csv(sourcePath)
           val toRemove = "`".toSet
-          myheader = header.split(",")
-          mycolumns.foreach(col =>
-            if(myheader.contains(col.split("AS")(0).filterNot(toRemove).trim)) {
-              val  i = myheader.indexOf(col.split("AS")(0).filterNot(toRemove).trim)
-              myheader(i) = col.split("AS")(1).filterNot(toRemove).trim
-            }
-          )
-          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
-
-          stopwatch stop()
-          val timeTaken = stopwatch.getTime
-          println(s"++++++ loading time : $timeTaken")
+          header = df.columns.mkString(",").filterNot(toRemove).trim.split(",")
+          println("this is header " + header.mkString(","))
+        case "parquet" => df = spark.read.options(options).parquet(sourcePath)
+        case "cassandra" =>
+          df = spark.read.format("org.apache.spark.sql.cassandra").options(options).load
+        case "elasticsearch" =>
+          df = spark.read.format("org.elasticsearch.spark.sql").options(options).load
+        case "mongodb" =>
+          //spark.conf.set("spark.mongodb.input.uri", "mongodb://127.0.0.1/test.myCollection")
+          val values = options.values.toList
+          val mongoConf = if (values.length == 4) makeMongoURI(values(0), values(1), values(2), values(3))
+          else makeMongoURI(values(0), values(1), values(2), null)
+          val mongoOptions: ReadConfig = ReadConfig(Map("uri" -> mongoConf, "partitioner" -> "MongoPaginateBySizePartitioner"))
+          df = spark.read.format("com.mongodb.spark.sql").options(mongoOptions.asOptions).load
+        case "jdbc" =>
+          df = spark.read.format("jdbc").options(options).load()
+        case "rdf" =>
+          import collection.JavaConversions._
+          val rdf = new NTtoDF()
+          df = rdf.options(options).read(sourcePath, sparkURI).toDF()
         case _ =>
       }
-      if(finalVer == null) {
-        finalVer = vertex
-      } else{
-        finalVer = finalVer.union(vertex)
+
+      df.createOrReplaceTempView("table")
+
+      try {
+        val newDF = spark.sql("SELECT " + columns + " FROM table")
+
+        if (dataSource_count == 1) {
+          finalDF = newDF
+        } else {
+          finalDF = finalDF.union(newDF)
+        }
+      } catch {
+        case ae: AnalysisException => val logger = println("ERROR: There is a mismatch between the mappings, query and/or data. " +
+          "Examples: Check `rr:reference` references a correct attribute, or if you have transformations, " +
+          "Check `rml:logicalSource` is the same between the TripleMap and the FunctionMap. Check if you are " +
+          "SELECTing a variable used in the graph patterns. Returned error is:\n" + ae)
+          System.exit(1)
+      }
+
+      // Transformations
+      if (leftJoinTransformations != null && leftJoinTransformations._2 != null) {
+        val column: String = leftJoinTransformations._1
+        logger.info("Left Join Transformations: " + column + " - " + leftJoinTransformations._2.mkString("."))
+        val ns_pred = get_NS_predicate(column)
+        val ns = prefixes(ns_pred._1)
+        val pred = ns_pred._2
+        val col = str + "_" + pred + "_" + ns
+        finalDF = transform(finalDF, col, leftJoinTransformations._2)
+
+      }
+      if (rightJoinTransformations != null && !rightJoinTransformations.isEmpty) {
+        logger.info("right Join Transformations: " + rightJoinTransformations.mkString("_"))
+        val col = str + "_ID"
+        finalDF = transform(finalDF, col, rightJoinTransformations)
       }
     }
+
+    /** creatig the edges **/
+      val idx = finalDF.columns.length-1
+    val newdf = finalDF.withColumnRenamed(finalDF.columns(idx),"id")
+    var newEdge = newdf.select(col(newdf.columns(idx)).alias("src"),
+      col(newdf.columns(idx)).alias("dst"),
+      col(newdf.columns(idx)).alias("relationship"))
+    /** creatig the graph **/
+    graphFrame = GraphFrame(newdf,newEdge)
+
+    println("sasa sipoon")
+    graphFrame.edges.show()
+    graphFrame.vertices.show()
+
+    stopwatch1 stop()
+    val timeTaken1 = stopwatch1.getTime
+    println(s"++++++ loading time : $timeTaken1")
+
+    logger.info("- filters: " + filters + " for star " + star)
 
     val stopwatch: StopWatch = new StopWatch
     stopwatch start()
@@ -130,51 +193,28 @@ class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryE
       if (predicate.nonEmpty) {
         val ns_p = get_NS_predicate(predicate.head) // Head because only one value is expected to be attached to the same star an same (object) variable
         val column = omitQuestionMark(star) + "_" + ns_p._2 + "_" + prefixes(ns_p._1)
+        logger.info("--- Filter column: " + column)
 
         nbrOfFiltersOfThisStar = filters.get(value).size()
 
         val conditions = filters.get(value).iterator()
         while (conditions.hasNext) {
           val operand_value = conditions.next()
+          logger.info("--- Operand - Value: " + operand_value)
           whereString = column + operand_value._1 + operand_value._2
-          //getting the column index in the table
-          val colIndex = myheader.indexOf(column)-1
+
+          println("where string: " + whereString)
 
           if (operand_value._1 != "regex") {
-            if(isAllDigits(operand_value._2)  && operand_value._1.equals("=")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (prop(colIndex).toLong==operand_value._2.toLong)
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (prop(colIndex).toLong<operand_value._2.toLong)
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">")){
-              println("this the gggggg  " + operand_value._2.toLong + " .... " + colIndex)
-              finalVer = finalVer.filter {
-                case (id, prop) => (prop(colIndex).toLong>operand_value._2.toLong)
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals(">=")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (prop(colIndex).toLong>=operand_value._2.toLong)
-                case _ => false
-              }
-            }else if(isAllDigits(operand_value._2)  && operand_value._1.equals("<=")){
-              finalVer = finalVer.filter {
-                case (id, prop) => (prop(colIndex).toLong<=operand_value._2.toLong)
-                case _ => false
-              }
-            }else{
-              finalVer = finalVer.filter {
-                case (id, prop) => (prop(colIndex).equals(operand_value._2.split("\"")(1)))
-                case _ => false
-              }
+            try {
+             // finalDF = finalDF.filter(whereString)
+              graphFrame =  graphFrame.filterVertices(whereString)
+            } catch {
+              case ae: NullPointerException => val logger = println("ERROR: No relevant source detected.")
+                System.exit(1)
             }
-          }
-          // else  finalGP = finalGP.filter(finalGP(column).like(operand_value._2.replace("\"","")))
+          } else
+            graphFrame =  graphFrame.filterVertices(finalDF(column).like(operand_value._2.replace("\"","")))
           // regular expression with _ matching an arbitrary character and % matching an arbitrary sequence
         }
       }
@@ -184,54 +224,85 @@ class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryE
     val timeTaken = stopwatch.getTime
     println(s"++++++ filter time : $timeTaken")
 
-    //creating temp edges
-    val edge: RDD[Edge[String]] = finalVer.map{(v) => Edge(v._1,v._1, "id")}
-    //creating graphs
-    var graph:Graph[Array[String],String] = Graph(finalVer,edge)
-    //creating the graph frame
-    /**
-     * val vertex = spark.read.option("header","true").load("csvgraph1_vertex.csv")
-     * val edges = spark.read.option("header","true").load("csvgraph1_edges.csv")
-     * val graph = GraphFrame(vertex, edges)
-     */
-    var newEdge = vertexx.select(col("id").alias("src"),
-      col("id").alias("dst"),
-      col(header.split(",")(1)).alias("relationship"))
+    logger.info(s"Number of filters of this star is: $nbrOfFiltersOfThisStar")
 
-    val graphFrame = GraphFrame(vertexx,newEdge)
-    println("this is grapphFrames")
+    /*******THIS IS JUST FOR TEST*******/
+    // logger.info("Number of Spark executors (JUST FOR TEST): " + spark.sparkContext.statusTracker.getExecutorInfos.length)
+    // logger.info("Master URI (JUST FOR TEST): " + spark.sparkContext.master)
+
+    println("final results of filtering")
     graphFrame.vertices.show()
     graphFrame.edges.show()
-    graphFrame.triplets.show()
 
-    val graphFrame2 = GraphFrame.fromGraphX(graph)
-    graphFrame2.vertices.show()
-    graphFrame2.edges.show()
-    graphFrame2.triplets.show()
-
-    (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
+    (graphFrame, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, null)
   }
 
-  def transform(ps: Any, column: String, transformationsArray: Array[String]): Any = {
-    ps.asInstanceOf[Graph[String,String]]
+  def transform(df: Any, column: String, transformationsArray : Array[String]): DataFrame = {
+
+    var ndf : DataFrame = df.asInstanceOf[DataFrame]
+    for (t <- transformationsArray) {
+      logger.info("Transformation next: " + t)
+      t match {
+        case "toInt" =>
+          logger.info("TOINT found")
+          ndf = ndf.withColumn(column, ndf(column).cast(IntegerType))
+        // From SO: values not castable will become null
+        case s if s.contains("scl") =>
+          val scaleValue = s.replace("scl","").trim.stripPrefix("(").stripSuffix(")")
+          logger.info("SCL found: " + scaleValue)
+          val operation = scaleValue.charAt(0)
+          operation match {
+            case '+' => ndf = ndf.withColumn(column, ndf(column) + scaleValue.substring(1).toInt)
+            case '-' => ndf = ndf.withColumn(column, ndf(column) - scaleValue.substring(1).toInt)
+            case '*' => ndf = ndf.withColumn(column, ndf(column) * scaleValue.substring(1).toInt)
+          }
+        case s if s.contains("skp") =>
+          val skipValue = s.replace("skp","").trim.stripPrefix("(").stripSuffix(")")
+          logger.info("SKP found: " + skipValue)
+          ndf = ndf.filter(!ndf(column).equalTo(skipValue))
+        case s if s.contains("substit") =>
+          val replaceValues = s.replace("substit","").trim.stripPrefix("(").stripSuffix(")").split("\\,")
+          val valToReplace = replaceValues(0)
+          val valToReplaceWith = replaceValues(1)
+          logger.info("SUBSTIT found: " + replaceValues.mkString(" -> "))
+          ndf = ndf.withColumn(column, when(col(column).equalTo(valToReplace), valToReplaceWith))
+        //ndf = df.withColumn(column, when(col(column) === valToReplace, valToReplaceWith).otherwise(col(column)))
+        case s if s.contains("replc") =>
+          val replaceValues = s.replace("replc","").trim.stripPrefix("(").stripSuffix(")").split("\\,")
+          val valToReplace = replaceValues(0).replace("\"","")
+          val valToReplaceWith = replaceValues(1).replace("\"","")
+          logger.info("REPLC found: " + replaceValues.mkString(" -> ") + " on column: " + column)
+          ndf = ndf.withColumn(column, when(col(column).contains(valToReplace), regexp_replace(ndf(column), valToReplace, valToReplaceWith)))
+        case s if s.contains("prefix") =>
+          val prefix = s.replace("prfix","").trim.stripPrefix("(").stripSuffix(")")
+          logger.info("PREFIX found: " + prefix)
+          ndf = ndf.withColumn(column, concat(lit(prefix), ndf.col(column)))
+        case s if s.contains("postfix") =>
+          val postfix = s.replace("postfix","").trim.stripPrefix("(").stripSuffix(")")
+          logger.info("POSTFIX found: " + postfix)
+          ndf = ndf.withColumn(column, concat(lit(ndf.col(column), postfix)))
+        case _ =>
+      }
+    }
+
+    ndf
   }
 
   def join(joins: ArrayListMultimap[String, (String, String)],
-           prefixes: Map[String, String],
-           star_df: Map[String, Graph[Array[String],String]],
-           edgeIdMap: Map[String,Array[String]],
-           sc: Any)
-  :Graph[Array[String],String] = {
+           prefixes: Map[String, String], star_df: Map[String, GraphFrame],
+           edgeIdMap: Map[String,Int],
+           sc: Any): GraphFrame = {
+
     val stopwatch: StopWatch = new StopWatch
     stopwatch start()
-
     import scala.collection.JavaConversions._
     import scala.collection.mutable.ListBuffer
 
     var pendingJoins = mutable.Queue[(String, (String, String))]()
     val seenDF : ListBuffer[(String,String)] = ListBuffer()
     var firstTime = true
-    var jGrah :Graph[Array[String],String] = null
+    val join = " x "
+    var jGF : GraphFrame = null
 
     val it = joins.entries.iterator
     while ({it.hasNext}) {
@@ -240,80 +311,102 @@ class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryE
       val op1 = entry.getKey
       val op2 = entry.getValue._1
       val jVal = entry.getValue._2
+      // TODO: add omitQuestionMark and omit it from the next
 
-      val vertex1 = star_df(op1).vertices
-      val vertex2 = star_df(op2).vertices
+      logger.info(s"-> GOING TO JOIN ($op1 $join $op2) USING $jVal...")
 
       val njVal = get_NS_predicate(jVal)
       val ns = prefixes(njVal._1)
 
-      var id1 : String = ""
-      var id2 : String = ""
-      var header1 : String = ""
-      var header2 : String = ""
-
       it.remove()
 
-      //getting the added number to the edges ids
-      if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
-        id2 = edgeIdMap(omitQuestionMark(op2))(0)
-        header2 = edgeIdMap(omitQuestionMark(op2))(1)
-      }
+      println("this is op1 " + op1 + "this is op2 " + op2)
 
-      if (edgeIdMap.keySet.contains(omitQuestionMark(op1)) ){
-        id1 = edgeIdMap(omitQuestionMark(op1))(1)
-        header1 = edgeIdMap(omitQuestionMark(op1))(1)
-      }
+      val gf1 = star_df(op1)
+      val gf2 = star_df(op2)
 
-      if (firstTime) {
-        firstTime = false
+      if (firstTime) { // First time look for joins in the join hashmap
+        println("this is join 1")
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
+
+        logger.info("...that's the FIRST JOIN")
         seenDF.add((op1, jVal))
         seenDF.add((op2, "ID"))
-        //foreign key
-        val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-        //getting the fk column
-        val colIndex = header1.split(",").indexOf(fk)-1
-        //creating the edges
-        val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
-        //creating the graph
-        jGrah = Graph(vertex1.union(vertex2).filter((v)=>v._2!=null)
-          , edges)
-        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+        firstTime = false
+
+        // Join level 1
+        try {
+          val v2 = gf2.vertices.withColumnRenamed("id",omitQuestionMark(op2) + "_ID")
+          jGF = GraphFrame(gf1.vertices.join(v2, gf1.vertices.col(omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns).equalTo(v2(omitQuestionMark(op2) + "_ID")))
+            ,gf1.edges.union(gf2.edges))
+
+          logger.info("...done")
+
+        } catch {
+          case ae: NullPointerException => val logger = println("ERROR: No relevant source detected.")
+            System.exit(1)
+        }
+
+        stopwatch stop()
+
+        val timeTaken = stopwatch.getTime
+
+        println("time aken by join 1 = " + timeTaken)
       } else {
         val dfs_only = seenDF.map(_._1)
-
+        logger.info(s"EVALUATING NEXT JOIN ...checking prev. done joins: $dfs_only")
         if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-          //foreign key
-          val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-          //getting the fk column
-          val colIndex = header1.split(",").indexOf(fk)-1
-          //creating the edges
-          val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
-          //creating the graph
-          jGrah = Graph(jGrah.vertices.union(vertex2).filter((v)=>v._2!=null)
-            , jGrah.edges.union(edges))
-          jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+          println("this is join 2")
+          logger.info("...we can join (this direction >>)")
+          val stopwatch: StopWatch = new StopWatch
+          stopwatch start()
+          val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+          val rightJVar = omitQuestionMark(op2) + "_ID"
+          val v2 = gf2.vertices.withColumnRenamed("id",omitQuestionMark(op2) + "_ID")
+
+          jGF = GraphFrame(jGF.vertices.join(v2, jGF.vertices.col(leftJVar).equalTo(v2(rightJVar)))
+            ,jGF.edges.union(gf2.edges))
+
           seenDF.add((op2,"ID"))
+          stopwatch stop()
+
+          val timeTaken = stopwatch.getTime
+
+          println("time aken by join 2 = " + timeTaken)
 
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
-          //foreign key
-          val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-          //getting the fk column
-          val colIndex = header1.split(",").indexOf(fk)-1
-          //creating the edges
-          val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)}
-          jGrah = Graph(jGrah.vertices.union(vertex1).filter((v)=>v._2!=null)
-            , jGrah.edges.union(edges))
-          jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+          logger.info("...we can join (this direction >>)")
+          println("this is join 3")
+          val stopwatch: StopWatch = new StopWatch
+          stopwatch start()
+          val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+          val rightJVar = omitQuestionMark(op2) + "_ID_ID"
+          val v2 = jGF.vertices.withColumnRenamed("id",omitQuestionMark(op2) + "_ID_ID")
+
+          jGF = GraphFrame(gf1.vertices.join(v2, gf1.vertices.col(leftJVar).equalTo(v2.col(rightJVar)))
+            ,gf1.edges.union(jGF.edges))
 
           seenDF.add((op1,jVal))
+          stopwatch stop()
+
+          val timeTaken = stopwatch.getTime
+
+          println("time aken by join 3 = " + timeTaken)
+
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
+          println("hi there 88")
+          logger.info("...no join possible -> GOING TO THE QUEUE")
           pendingJoins.enqueue((op1, (op2, jVal)))
+
         }
       }
     }
 
     while (pendingJoins.nonEmpty) {
+      println("hi there 00")
+
+      logger.info("ENTERED QUEUED AREA: " + pendingJoins)
       val dfs_only = seenDF.map(_._1)
 
       val e = pendingJoins.head
@@ -322,193 +415,260 @@ class GraphFrameExecutor (sparkURI: String, mappingsFile: String) extends QueryE
       val op2 = e._2._1
       val jVal = e._2._2
 
-      val vertex1 = star_df(op1).vertices
-      val vertex2 = star_df(op2).vertices
-
       val njVal = get_NS_predicate(jVal)
       val ns = prefixes(njVal._1)
 
-      var id1 : String = ""
-      var id2 : String = ""
-      var header1 : String = ""
-      var header2 : String = ""
+      logger.info(s"-> Joining ($op1 $join $op2) using $jVal...")
 
-      //getting the added number to the edges ids
-      if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
-        id2 = edgeIdMap(omitQuestionMark(op2))(0)
-        header2 = edgeIdMap(omitQuestionMark(op2))(1)
-      }
+      val gf1 = star_df(op1)
+      val gf2 = star_df(op2)
 
-      if (edgeIdMap.keySet.contains(omitQuestionMark(op1)) ){
-        id1 = edgeIdMap(omitQuestionMark(op1))(1)
-        header1 = edgeIdMap(omitQuestionMark(op1))(1)
-      }
-
-      //getting the added number to the edges ids
       if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-        //foreign key
-        val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-        //getting the fk column
-        val colIndex = header1.split(",").indexOf(fk)-1
-        //creating the edges
-        val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
-        //creating the graph
-        jGrah = Graph(jGrah.vertices.union(vertex2).filter((v)=>v._2!=null)
-          , jGrah.edges.union(edges))
-        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+        println("this is joining 4")
+        val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+        val rightJVar = omitQuestionMark(op2) + "_ID"
+        val v2 = gf2.vertices.withColumnRenamed("id",omitQuestionMark(op2) + "_ID")
 
+        jGF = GraphFrame(jGF.vertices.join(v2, jGF.vertices.col(leftJVar).equalTo(v2.col(rightJVar)))
+          ,jGF.edges.union(gf2.edges))
+        seenDF.add((op2,"ID"))
       } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
-        //foreign key
-        val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
-        //getting the fk column
-        val colIndex = header1.split(",").indexOf(fk)-1
-        //creating the edges
-        val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk)}
-        jGrah = Graph(jGrah.vertices.union(vertex1).filter((v)=>v._2!=null)
-          , jGrah.edges.union(edges))
-        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+        println("this is joining 5")
+        val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+        val rightJVar = omitQuestionMark(op2) + "_ID"
+        val v2 = jGF.vertices.withColumnRenamed("id",omitQuestionMark(op2) + "_ID")
 
+        jGF = GraphFrame(v2.join(gf1.vertices, gf1.vertices.col(leftJVar).equalTo(v2.col(rightJVar)))
+          ,jGF.edges.union(gf1.edges))
+        //jDF = df1.join(jDF, df1.col(leftJVar).equalTo(jDF.col(rightJVar)))
+
+        seenDF.add((op1,jVal))
       } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
         println("hi there 33")
-
         pendingJoins.enqueue((op1, (op2, jVal)))
       }
+
       pendingJoins = pendingJoins.tail
     }
-
 
     stopwatch stop()
     val timeTaken = stopwatch.getTime
     println(s"++++++ joining time : $timeTaken")
 
-    println("this is is isi is isi isi isisd fjkj ")
-    jGrah.edges.collect.foreach(println(_))
-
-    jGrah
+    jGF
   }
 
-  def project(jDF: Any,
-              columnNames: Seq[String],
-              edgeIdMap: Map[String,Array[String]],
-              distinct: Boolean): Graph[Array[String], String] = {
+  def joinReordered(joins: ArrayListMultimap[String, (String, String)], prefixes: Map[String, String], star_df: Map[String, DataFrame], startingJoin: (String, (String, String)), starWeights: Map[String, Double]): DataFrame = {
+    import scala.collection.JavaConversions._
+    import scala.collection.mutable.ListBuffer
 
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
+    val seenDF : ListBuffer[(String,String)] = ListBuffer()
+    val joinSymbol = " x "
+    var jDF : DataFrame = null
 
-    var jGP = jDF.asInstanceOf[Graph[Array[String],String]]
+    val op1 = startingJoin._1
+    val op2 = startingJoin._2._1
+    val jVal = startingJoin._2._2
+    val njVal = get_NS_predicate(jVal)
+    val ns = prefixes(njVal._1)
+    val df1 = star_df(op1)
+    val df2 = star_df(op2)
 
-    var columnIndexList: Map[String,String]= Map.empty
-    var vertex: RDD[(VertexId, Array[String])] = null
+    logger.info(s"-> DOING FIRST JOIN ($op1 $joinSymbol $op2) USING $jVal (namespace: $ns)")
 
-    //getting columns index
-    edgeIdMap.values.foreach{
-      case headers =>
-        columnNames.foreach{
-          column=>
-            if(headers(1).split(",").contains(column) && !columnIndexList.contains(headers(0) + "," + headers.indexOf(column))){
-              val num : Long = headers(1).split(",").indexOf(column)-1
-              if(columnIndexList.keySet.contains(headers(0))){
-                val x = columnIndexList(headers(0))
-                columnIndexList += (headers(0) ->( x + "," + num))
-              }else{
-                columnIndexList += (headers(0) -> num.toString)
-              }
+    seenDF.add((op1, jVal))
+    seenDF.add((op2, "ID")) // TODO: implement join var in the right side too
 
-            }
-        }
+    // Join level 1
+    val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+    val rightJVar = omitQuestionMark(op2) + "_ID"
+    jDF = df1.join(df2, df1.col(leftJVar).equalTo(df2(rightJVar)))
+
+    joins.remove(startingJoin._1,(startingJoin._2._1, startingJoin._2._2))
+
+    logger.info("...done!")
+
+    var joinsMap : Map[(String,String),String] = Map()
+    for (jj <- joins.entries()) {
+      joinsMap += (jj.getKey, jj.getValue._1) -> jj.getValue._2
+    }
+    val seenDF1 : mutable.Set[(String,String)] =  mutable.Set()
+    for (s <- seenDF) {
+      seenDF1 += s
     }
 
-    println("**************+++++++++++++++++++")
+    logger.info("joinsMap: " + joinsMap)
+    while(joinsMap.size() > 0) {
 
-    columnIndexList.foreach {
-      index =>
-        println(index._1 + "..." + index._2)
-        if(vertex==null){
-          vertex = jGP.vertices.filter( v=>
-            ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
-            .map(v=>(v._1,
-              index._2.split(",").map({i=>v._2(i.toInt)})
-            ))
-        }else{
-          vertex = vertex.union(jGP.vertices.filter( v=>
-            ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
-            .map(v=>(v._1,
-              index._2.split(",").map({i=>v._2(i.toInt)})
-            )))
+      val dfs_only = seenDF.map(_._1)
+      logger.info(s"-> Looking for join(s) that join(s) with: $dfs_only")
+
+      var joinable : Map[(String, String), String] = Map.empty // or Map()
+
+      val j = joinsMap.iterator
+      while ({j.hasNext}) {
+        val entry = j.next
+
+        val op1 = entry._1._1
+        val op2 = entry._1._2
+        val jVal = entry._2
+
+        val njVal = get_NS_predicate(jVal)
+        val ns = prefixes(njVal._1)
+
+        if (dfs_only.contains(op1) || dfs_only.contains(op2)) {
+          joinable += ((op1,op2) -> jVal)
+          joinsMap -= ((op1,op2))
         }
-    }
-
-    var att = ""
-    jGP.edges.collect.foreach(e => att = e.attr)
-
-    if(vertex!=null && att!=""){
-      jGP = Graph(vertex,jGP.edges)
-      jGP = jGP.subgraph(vpred = (vid,vd)=>vd!=null)
-      if(jGP.edges.count()==0){
-        //creating temp edges
-        val edge: RDD[Edge[String]] = vertex.map{(v) => Edge(v._1,v._1, "id")}
-        //creating graphs
-        jGP = Graph(vertex,edge)
       }
+
+      logger.info("Found those: " + joinable)
+
+      var weighedJoins : Map[(String,(String,String),String),Double] = Map()
+      for(jj <- joinable) {
+        val op1 = jj._1._1
+        val op2 = jj._1._2
+        val jVal = jj._2
+
+        if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
+          logger.info(s"...getting weight of join variable $op2")
+
+          weighedJoins += (op1,(op2,jVal),"op2") -> starWeights(op2)
+
+        } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
+          logger.info(s"...getting weight of join variable $op1")
+
+          weighedJoins += (op1,(op2,jVal),"op1") -> starWeights(op1)
+        }
+      }
+
+      // Sort joins by their weight on the joining side
+      logger.info(s"weighedJoins: $weighedJoins")
+
+      val sortedWeighedJoins = ListMap(weighedJoins.toSeq.sortWith(_._2 > _._2):_*)
+
+      logger.info(s"sortedWeighedJoins: $sortedWeighedJoins")
+
+      for(s <- sortedWeighedJoins) {
+        val op1 = s._1._1
+        val op2 = s._1._2._1
+        val jVal = s._1._2._2
+        val njVal = get_NS_predicate(jVal)
+        val ns = prefixes(njVal._1)
+        val joinSide = s._1._3
+
+        val df1 = star_df(op1)
+        val df2 = star_df(op2)
+
+        logger.info(s"---- $op1 -- $op2 -- $joinSide -- $jVal")
+
+        if (joinSide.equals("op2")) {
+          logger.info("...we can join (this direction >>) ")
+
+          val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+          val rightJVar = omitQuestionMark(op2) + "_ID"
+
+          logger.info(s"$leftJVar XXX $rightJVar")
+          jDF = jDF.join(df2, jDF.col(leftJVar).equalTo(df2.col(rightJVar)))
+
+          seenDF.add((op2,"ID"))
+        } else if (joinSide.equals("op1")) {
+          logger.info("...we can join (this direction <<) ")
+
+          val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
+          val rightJVar = omitQuestionMark(op2) + "_ID"
+          jDF = df1.join(jDF, df1.col(leftJVar).equalTo(jDF.col(rightJVar)))
+
+          seenDF.add((op1,jVal))
+        }
+      }
+      logger.info(s"-> Fully joined: $seenDF \n")
     }
+
+    jDF
+  }
+
+  def project(jDF: Any, columnNames: Seq[String], distinct: Boolean): GraphFrame = {
+    val columnNames2 = columnNames :+ "id"
+    println("this is column names " + columnNames2.mkString(","))
+    if(!distinct)
+      GraphFrame(jDF.asInstanceOf[GraphFrame].vertices.select(columnNames2.head, columnNames2.tail: _*),jDF.asInstanceOf[GraphFrame].edges)
+    else
+      GraphFrame(jDF.asInstanceOf[GraphFrame].vertices.select(columnNames2.head, columnNames2.tail: _*).distinct(),jDF.asInstanceOf[GraphFrame].edges)
+
+  }
+
+  def schemaOf(jDF: DataFrame): Unit = {
+    jDF.printSchema()
+  }
+
+  def count(jDF: GraphFrame): Long = {
+    jDF.edges.count()
+  }
+
+  def orderBy(jDF: Any, direction: String, variable: String, sc: Any): GraphFrame = {
+    logger.info("ORDERING...")
+
+    var graph :GraphFrame = null
+
+    if (direction == "-1") {
+      graph = GraphFrame(jDF.asInstanceOf[GraphFrame].vertices.orderBy(asc(variable)),jDF.asInstanceOf[GraphFrame].edges)
+    } else { // TODO: assuming the other case is automatically -1 IFNOT change to "else if (direction == "-2") {"
+      graph = GraphFrame(jDF.asInstanceOf[GraphFrame].vertices.orderBy(desc(variable)),jDF.asInstanceOf[GraphFrame].edges)
+    }
+    graph
+  }
+
+  def groupBy(jDF: Any, groupBys: (ListBuffer[String], mutable.Set[(String,String)])): GraphFrame = {
+
+    val groupByVars = groupBys._1
+    val aggregationFunctions = groupBys._2
+
+    val cols : ListBuffer[Column] = ListBuffer()
+    for (gbv <- groupByVars) {
+      cols += col(gbv)
+    }
+    logger.info("aggregationFunctions: " + aggregationFunctions)
+
+    var aggSet : mutable.Set[(String,String)] = mutable.Set()
+    for (af <- aggregationFunctions){
+      aggSet += ((af._1,af._2))
+    }
+    val aa = aggSet.toList
+    val newJDF : GraphFrame = GraphFrame(jDF.asInstanceOf[GraphFrame].vertices.groupBy(cols: _*).agg(aa.head, aa.tail : _*),jDF.asInstanceOf[GraphFrame].edges)
+
+    // df.groupBy("department").agg(max("age"), sum("expense"))
+    // ("o_price_cbo","sum"),("o_price_cbo","max")
+    // newJDF.printSchema()
+
+    newJDF
+  }
+
+  def limit(jDF: Any, limitValue: Int) : GraphFrame = GraphFrame(jDF.asInstanceOf[GraphFrame].vertices.limit(limitValue),jDF.asInstanceOf[GraphFrame].edges)
+
+  def show(jDF: Any): Unit = {
+    val stopwatch: StopWatch = new StopWatch
+    stopwatch start()
+
+    val columns = ArrayBuffer[String]()
+    //jDF.asInstanceOf[DataFrame].show
+    val df = jDF.asInstanceOf[GraphFrame].vertices
+    //df.printSchema()
+    val schema = df.schema
+    for (col <- schema)
+      columns += col.name
+
+    println(columns.mkString(","))
+    df.foreach(x => println(x))
+
+    println(s"Number of results: ${jDF.asInstanceOf[GraphFrame].edges.count()}")
 
     stopwatch stop()
     val timeTaken = stopwatch.getTime
-    println(s"++++++ projection time : $timeTaken")
-    jGP
-
-  }
-
-  def orderBy(jDF: Any, direction: String, variable: String, sc: Any):
-  Graph[Array[String], String] = {
-    jDF.asInstanceOf[Graph[Array[String], String]]
-  }
-
-  def groupBy(joinPS: Any, groupBys: (ListBuffer[String], mutable.Set[(String, String)])): Graph[Array[String],String]= {
-    joinPS.asInstanceOf[Graph[Array[String],String]]
-  }
-
-  def limit(joinPS: Any, limitValue: Int): Graph[Array[String],String] = {
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
-    joinPS.asInstanceOf[Graph[Array[String],String]]
-  }
-
-  def show(PS: Any): Unit = {
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
-    var graph = PS.asInstanceOf[Graph[Array[String],String]]
-    //graph = Graph(graph.vertices.filter((v)=>v._2!=null),graph.edges)
-    // graph = graph.subgraph(vpred = (vid,vd)=>vd!=null)
-    var att = ""
-    graph.edges.collect.foreach(e=> att = e.attr)
-    if(!att.equals("id")){
-      graph.triplets.
-        map(triplet =>"["+ triplet.srcAttr.mkString(",") + "," + triplet.dstAttr.mkString(",")  + "]")
-        .collect().distinct
-        .foreach(println(_))
-    }else{
-      graph.triplets.
-        map(triplet =>"["+ triplet.srcAttr.mkString(",") + "]")
-        .collect().distinct
-        .foreach(println(_))
-    }
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
-    println(s"++++++ show time : $timeTaken")
-
-    println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
+    println(s"Time taken by show method: $timeTaken")
   }
 
   def run(jDF: Any): Unit = {
     this.show(jDF)
   }
-
-
-  def isAllDigits(x: String) = x forall Character.isDigit
-
-  def count(joinPS: Graph[Array[String], String]): VertexId = {
-    joinPS.asInstanceOf[Graph[Array[String], String]].edges.count()
-  }
-
 }

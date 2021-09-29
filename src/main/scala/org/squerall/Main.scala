@@ -3,6 +3,7 @@ package org.squerall
 import org.apache.commons.lang.time.StopWatch
 import org.apache.spark.graphx.Graph
 import org.apache.spark.sql.DataFrame
+import org.graphframes.GraphFrame
 import org.squerall.model.DataQueryFrame
 
 /**
@@ -10,38 +11,46 @@ import org.squerall.model.DataQueryFrame
   */
 object Main extends App {
 
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
 
-    var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q3.sparql"//args(0)
     val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
-    val executorID = "jdbc:presto://localhost:8080"//args(3) //"local"
+    val executorID = "local"//"jdbc:presto://localhost:8080"//args(3)
     val reorderJoin = "n"//args(4)
-    val queryEngine = "p"//args(5)
+    val queryEngine = "s"//args(5)
 
-    if (queryEngine == "s") { // Spark as  query engine
-        val executor : SparkExecutor = new SparkExecutor(executorID, mappingsFile)
-        val run = new Run[DataFrame](executor)
-        run.application(queryFile,mappingsFile,configFile,executorID)
+    var timeTable = new Array[Double](20)
 
-    } else if(queryEngine == "p") { // Presto as query engine
-        val executor : PrestoExecutor = new PrestoExecutor(executorID, mappingsFile)
-        val run = new Run[DataQueryFrame](executor)
-        run.application(queryFile,mappingsFile,configFile,executorID)
+    for( a <- 1 to 5) {
+        val stopwatch: StopWatch = new StopWatch
+        stopwatch start()
 
-    }  else if(queryEngine == "g") { // Spark GraphX as query engine
-        val executor : SparkGraphxExecutor = new SparkGraphxExecutor(executorID, mappingsFile)
-        val run = new RunGraph[Graph[Array[String],String]](executor)
-        run.application(queryFile,mappingsFile,configFile,executorID)
-    } else if(queryEngine == "f") { // Spark GraphX as query engine
-        val executor : GraphFrameExecutor = new GraphFrameExecutor(executorID, mappingsFile)
-        val run = new RunGraph[Graph[Array[String],String]](executor)
-        run.application(queryFile,mappingsFile,configFile,executorID)
+        var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q"+a+".sparql" //args(0)
+
+        if (queryEngine == "s") { // Spark as  query engine
+            val executor: SparkExecutor = new SparkExecutor(executorID, mappingsFile)
+            val run = new Run[DataFrame](executor)
+            run.application(queryFile, mappingsFile, configFile, executorID)
+
+        } else if (queryEngine == "p") { // Presto as query engine
+            val executor: PrestoExecutor = new PrestoExecutor(executorID, mappingsFile)
+            val run = new Run[DataQueryFrame](executor)
+            run.application(queryFile, mappingsFile, configFile, executorID)
+
+        } else if (queryEngine == "g") { // Spark GraphX as query engine
+            val executor: SparkGraphxExecutor = new SparkGraphxExecutor(executorID, mappingsFile)
+            val run = new RunGraph[Graph[Array[String], String]](executor)
+            run.application(queryFile, mappingsFile, configFile, executorID)
+        } else if (queryEngine == "f") { // Spark GraphX as query engine
+            val executor: GraphFrameExecutor = new GraphFrameExecutor(executorID, mappingsFile)
+            val run = new Run[GraphFrame](executor)
+            run.application(queryFile, mappingsFile, configFile, executorID)
+        }
+
+        stopwatch stop()
+        val timeTaken = stopwatch.getTime
+        timeTable(a) = timeTaken
     }
 
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
+    println("the program execution time is " + timeTable.mkString(", "))
 
-    println("the program execution time is " + timeTaken)
 }
