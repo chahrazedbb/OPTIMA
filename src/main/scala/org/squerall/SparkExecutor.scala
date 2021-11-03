@@ -554,7 +554,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             jDF.asInstanceOf[DataFrame].select(columnNames.head, columnNames.tail: _*)
         else
             jDF.asInstanceOf[DataFrame].select(columnNames.head, columnNames.tail: _*).distinct()
-
     }
 
     def schemaOf(jDF: DataFrame): Unit = {

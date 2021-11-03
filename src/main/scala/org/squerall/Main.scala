@@ -14,17 +14,18 @@ object Main extends App {
 
     val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
-    val executorID = "local"//"jdbc:presto://localhost:8080"//args(3)
+    val executorID = "local" //jdbc:presto://localhost:8080"//args(3)//"local"
     val reorderJoin = "n"//args(4)
-    val queryEngine = "s"//args(5)
+    val queryEngine = "g"//args(5)
 
     var timeTable = new Array[Double](20)
 
-    for( a <- 1 to 5) {
+    for( a <- 1 to 2) {
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
 
-        var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q"+a+".sparql" //args(0)
+      //  var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q"+a+".sparql" //args(0)
+      var queryFile = "/home/chahrazed/queries/onlyJoinQueries/fourJoins/q"+a+".sparql" //args(0)
 
         if (queryEngine == "s") { // Spark as  query engine
             val executor: SparkExecutor = new SparkExecutor(executorID, mappingsFile)
