@@ -16,7 +16,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     var num = 0
     var edgeIdMap: Map[String,Array[String]] = Map.empty
-    var sc: Any = null
+    //var sc: Any = null
     // 1. Read SPARQL query
     logger.info("Starting QUERY ANALYSIS")
 
@@ -182,9 +182,9 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
       // TODO: the else block looks like not being reached, check it
       if (joinedToFlag.contains(star) || joinedFromFlag.contains(star)) {
-        val (ds, numberOfFiltersOfThisStar, parsetID ,mymap, scc) = executor.query(dataSources, options, toJoinWith = true, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
+        val (ds, numberOfFiltersOfThisStar, parsetID ,mymap) = executor.query(dataSources, options, toJoinWith = true, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
 
-        sc = scc
+        //sc = scc
 
         if(edgeIdMap.isEmpty){
           edgeIdMap = mymap
@@ -204,8 +204,8 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
         //ds.printSchema() // SEE WHAT TO DO HERE TO SHOW BACK THE SCHEMA - MOVE IN SPARKEXECUTOR
       } else if (!joinedToFlag.contains(star) && !joinedFromFlag.contains(star)) {
 
-        val (ds, numberOfFiltersOfThisStar, parsetID, mymap, scc) = executor.query(dataSources, options, toJoinWith = false, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
-        sc = scc
+        val (ds, numberOfFiltersOfThisStar, parsetID, mymap) = executor.query(dataSources, options, toJoinWith = false, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
+        //sc = scc
 
         //ds.printSchema() // SEE WHAT TO DO HERE TO SHOW BACK THE SCHEMA - MOVE IN SPARKEXECUTOR
 
@@ -251,7 +251,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       logger.info(s"- Starting join: $firstJoin \n")
 
       // Final global join
-      finalDataSet = executor.join(joins, prefixes, star_df, edgeIdMap, sc)
+      finalDataSet = executor.join(joins, prefixes, star_df, edgeIdMap)
 
       //finalDataSet.asInstanceOf[DataFrame].printSchema()
 
@@ -313,7 +313,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
         val variable = o._1
         val direction = o._2
 
-        finalDataSet = executor.orderBy(finalDataSet, direction, variable, sc)
+        finalDataSet = executor.orderBy(finalDataSet, direction, variable)
       }
     }
 

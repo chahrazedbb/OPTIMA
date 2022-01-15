@@ -20,12 +20,12 @@ object Main extends App {
 
     var timeTable = new Array[Double](20)
 
-    for( a <- 1 to 2) {
+    for( a <- 3 to 3) {
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
 
       //  var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q"+a+".sparql" //args(0)
-      var queryFile = "/home/chahrazed/queries/onlyJoinQueries/fourJoins/q"+a+".sparql" //args(0)
+      var queryFile = "/home/chahrazed/queries/validating_queries/q"+a+".sparql" //args(0)
 
         if (queryEngine == "s") { // Spark as  query engine
             val executor: SparkExecutor = new SparkExecutor(executorID, mappingsFile)

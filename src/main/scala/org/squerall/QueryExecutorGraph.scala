@@ -24,7 +24,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String,String), String],
             edgeId:Int
-           ) : (T, Integer, String, Map[String, Array[String]],Any)
+           ) : (T, Integer, String, Map[String, Array[String]])
 
   /* Transforms a ParSet to another ParSet based on the SPARQL TRANSFORM clause */
   def transform(ps: Any, column: String, transformationsArray : Array[String]): Any
@@ -33,8 +33,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   def join(joins: ArrayListMultimap[String, (String, String)],
            prefixes: Map[String, String],
            star_df: Map[String,T],
-           edgeIdMap: Map[String,Array[String]],
-           sc: Any): T
+           edgeIdMap: Map[String,Array[String]]): T
 
   /* Generates a new ParSet projecting out one or more attributes */
   def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], distinct: Boolean): T
@@ -43,7 +42,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   def count(joinPS: T): Long
 
   /* Sort tuples of a ParSet based on an attribute variable */
-  def orderBy(joinPS: Any, direction: String, variable: String, sc: Any): T
+  def orderBy(joinPS: Any, direction: String, variable: String): T
 
   /* Group attributes based on aggregates function(s) */
   def groupBy(joinPS: Any, groupBys: (ListBuffer[String], mutable.Set[(String,String)])): T

@@ -2,17 +2,24 @@ package org.squerall
 
 import java.util
 import com.google.common.collect.ArrayListMultimap
+import com.mongodb.spark.MongoSpark
+import com.mongodb.spark.config.ReadConfig
 import org.apache.commons.lang.time.StopWatch
-import org.apache.spark.SparkContext
 import org.apache.spark.graphx.{Edge, Graph, VertexId}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{JdbcRDD, RDD}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.squerall.Helpers._
 
+import java.sql.{DriverManager, ResultSet}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends QueryExecutorGraph[Graph[Array[String],String]] {
+
+  def extractValues(r: ResultSet) = {  (r.getInt(1), r.getString(2))}
+
+  //val values = options.values.toList
+  //print("those are values " + values(0) + ", " + values(1) + ", " + values(2) + ", " + values(3))
 
   def query(sources: mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
             optionsMap_entity: mutable.HashMap[String, (Map[String, String], String)],
@@ -26,18 +33,18 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String, String), String], edgeId: Int):
-  (Graph[Array[String],String],Integer,String,Map[String,Array[String]],Any)  = {
+  (Graph[Array[String],String],Integer,String,Map[String,Array[String]])  = {
 
     val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
     val sc = spark.sparkContext
-    var edgeIdMap : Map[String, Array[String]] = Map.empty
     var dataSource_count = 0
     var parSetId = ""
-    var vertex: RDD[(VertexId, Array[String])] = null
     var finalVer: RDD[(VertexId, Array[String])] = null
-    var myheader: Array[String] = Array.empty
-    var header = ""
+
     var myheaderIndex : Array[Int] = Array.empty
+    var myheader: Array[String] = Array.empty
+    var edgeIdMap : Map[String, Array[String]] = Map.empty
+
     for (s <- sources) {
 
       dataSource_count += 1 // in case of multiple relevant data sources to union
@@ -64,6 +71,9 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           columns = columns + "," + id + " AS " + str + "_ID"
       }
 
+      var vertex: RDD[(VertexId, Array[String])] = null
+      var header = ""
+
       sourceType match {
         case "csv" =>
           val stopwatch: StopWatch = new StopWatch
@@ -89,14 +99,44 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             .map(line =>  line.split(","))
             .map( parts => ((edgeId+"00"+parts.head).toLong, parts))
 
-           vertex = vertex2.map(v=>(v._1,myheaderIndex.map({i=>v._2(i)})))
-
+          vertex = vertex2.map(v=>(v._1,myheaderIndex.map({i=>v._2(i)})))
           edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
 
           stopwatch stop()
           val timeTaken = stopwatch.getTime
           println(s"++++++ loading time : $timeTaken")
-        case _ =>
+        case "mongodb" =>
+          //spark.conf.set("spark.mongodb.input.uri", "mongodb://127.0.0.1/test.myCollection")
+          val values = options.values.toList
+          val mongoConf = if (values.length == 4) makeMongoURI(values(0), values(1), values(2), values(3))
+          else makeMongoURI(values(0), values(1), values(2), null)
+          val mongoOptions: ReadConfig = ReadConfig(Map("uri" -> mongoConf, "partitioner" -> "MongoPaginateBySizePartitioner"))
+          //df = spark.read.format("com.mongodb.spark.sql").options(mongoOptions.asOptions).load
+          val rdd = MongoSpark.load(sc,mongoOptions)
+          //getting the header
+          val mycolumns = columns.split(",")
+          val toRemove = "`".toSet
+          mycolumns.foreach(col =>
+            myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
+          )
+          vertex =  rdd.filter(line => line != header).map(d=>((edgeId+"00"+d.get("id").toString).toLong,mycolumns.map({i=>d.get(i.split("AS")(0).filterNot(toRemove).trim).toString})))
+          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
+        case "jdbc" =>
+          //df = spark.read.format("jdbc").options(options).load()
+         //new JdbcRDD(sc,() => createConnection(),"SELECT * FROM producer WHERE ? <= id AND id <= ?", lowerBound = 1, upperBound = 3, numPartitions = 2, mapRow = extractValues)
+          //getting the header
+          val mycolumns = columns.split(",")
+          val toRemove = "`".toSet
+          mycolumns.foreach(col =>
+            myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
+          )
+          var selected_columns : Array[String] = Array.empty
+          mycolumns.foreach(col =>
+            selected_columns = selected_columns :+ col.split("AS")(0).filterNot(toRemove).trim
+          )
+          val jdbcRDD = LoadSimpleJdbc.getResults(sc,selected_columns,options)
+          vertex = jdbcRDD.map(j=>((edgeId+"00"+j._1.toString).toLong,j._2))
+          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
       }
       if(finalVer == null) {
         finalVer = vertex
@@ -180,7 +220,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     //creating graphs
     var graph:Graph[Array[String],String] = Graph(finalVer,edge)
 
-    (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
+    (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap)
   }
 
   def transform(ps: Any, column: String, transformationsArray: Array[String]): Any = {
@@ -190,8 +230,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
   def join(joins: ArrayListMultimap[String, (String, String)],
            prefixes: Map[String, String],
            star_df: Map[String, Graph[Array[String],String]],
-           edgeIdMap: Map[String,Array[String]],
-           sc: Any)
+           edgeIdMap: Map[String,Array[String]])
   :Graph[Array[String],String] = {
     val stopwatch: StopWatch = new StopWatch
     stopwatch start()
@@ -424,7 +463,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   }
 
-  def orderBy(jDF: Any, direction: String, variable: String, sc: Any):
+  def orderBy(jDF: Any, direction: String, variable: String):
   Graph[Array[String], String] = {
     jDF.asInstanceOf[Graph[Array[String], String]]
   }
