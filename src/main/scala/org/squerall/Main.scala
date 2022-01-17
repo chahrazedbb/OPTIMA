@@ -20,7 +20,7 @@ object Main extends App {
 
     var timeTable = new Array[Double](20)
 
-    for( a <- 3 to 3) {
+    for( a <- 2 to 2) {
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
 

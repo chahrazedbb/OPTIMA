@@ -112,6 +112,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     import collection.JavaConversions._
                     val rdf = new NTtoDF()
                     df = rdf.options(options).read(sourcePath, sparkURI).toDF()
+                case "neo4j" =>
+
                 case _ =>
             }
 
