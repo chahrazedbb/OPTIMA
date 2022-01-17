@@ -166,7 +166,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           val values = options.values.toList
           val table_name = values(1)
           val neo = Neo4j(sc)
-          val rdd = neo.cypher("MATCH (var:"+table_name+") RETURN" + selected_columns).loadRowRdd
+          val rdd = neo.cypher("MATCH (var:"+table_name+") RETURN " + selected_columns).loadRowRdd
           rdd.collect.foreach(u=>println(u))
           vertex = rdd.map(r=>((edgeId+"00"+r.getLong(0).toString).toLong,myheaderIndex.map({i=>r.getString(i)})))
           vertex.collect.foreach(v=> println(v._1+","+v._2.mkString(", ")))

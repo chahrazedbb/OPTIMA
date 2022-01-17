@@ -5,9 +5,11 @@ import com.google.common.collect.ArrayListMultimap
 import com.mongodb.spark.config.ReadConfig
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, SparkSession}
+import org.neo4j.spark.Neo4jConfig
 import org.squerall.Helpers._
 
 import scala.collection.immutable.ListMap
@@ -38,8 +40,12 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
               edgeId:Int
              ): (DataFrame, Integer, String, Map[String, Int], Any) = {
 
-
-        val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
+        val config = new SparkConf()
+        config.set(Neo4jConfig.prefix + "url", "bolt://localhost")
+        config.set(Neo4jConfig.prefix + "user", "neo4j")
+        config.set(Neo4jConfig.prefix + "password", "test")
+        val spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(config).getOrCreate
+        val sc = spark.sparkContext
         //TODO: get from the function if there is a relevant data source that requires setting config to SparkSession
 
         var finalDF : DataFrame = null
@@ -113,7 +119,11 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     val rdf = new NTtoDF()
                     df = rdf.options(options).read(sourcePath, sparkURI).toDF()
                 case "neo4j" =>
-
+                    import org.neo4j.spark._
+                    val values = options.values.toList
+                    val table_name = values(1)
+                    val neo = Neo4j(sc)
+                    df = neo.cypher("MATCH (var:"+table_name+") RETURN var" ).loadDataFrame
                 case _ =>
             }
 
