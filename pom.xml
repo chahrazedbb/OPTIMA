@@ -52,6 +52,11 @@
             <artifactId>jena-arq</artifactId>
             <version>${jena.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.datastax.dse</groupId>
+            <artifactId>spark-cassandra-connector_2.11</artifactId>
+            <version>3.0-alpha</version>
+        </dependency>
 
         <dependency>
             <groupId>com.google.guava</groupId>
@@ -68,11 +73,7 @@
             <artifactId>spark-sql_${scala.version}</artifactId>
             <version>${spark.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.datastax.spark</groupId>
-            <artifactId>spark-cassandra-connector_${scala.version}</artifactId>
-            <version>2.4.0</version>
-        </dependency>
+
         <dependency>
             <groupId>org.mongodb.spark</groupId>
             <artifactId>mongo-spark-connector_2.11</artifactId>

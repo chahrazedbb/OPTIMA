@@ -5,13 +5,14 @@ import com.google.common.collect.ArrayListMultimap
 import com.mongodb.spark.MongoSpark
 import com.mongodb.spark.config.ReadConfig
 import org.apache.commons.lang.time.StopWatch
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx.{Edge, Graph, VertexId}
 import org.apache.spark.rdd.{JdbcRDD, RDD}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.neo4j.spark.Neo4jConfig
 import org.squerall.Helpers._
 
+import java.nio.charset.StandardCharsets
 import java.sql.{DriverManager, ResultSet}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -36,12 +37,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String, String), String], edgeId: Int):
   (Graph[Array[String],String],Integer,String,Map[String,Array[String]])  = {
-    val config = new SparkConf()
-    config.set(Neo4jConfig.prefix + "url", "bolt://localhost")
-    config.set(Neo4jConfig.prefix + "user", "neo4j")
-    config.set(Neo4jConfig.prefix + "password", "test")
-    val spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(config).getOrCreate
-    val sc = spark.sparkContext
+    var spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
+    var sc = spark.sparkContext
     var dataSource_count = 0
     var parSetId = ""
     var finalVer: RDD[(VertexId, Array[String])] = null
@@ -61,6 +58,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
       var columns = getSelectColumnsFromSet(attr_predicate, omitQuestionMark(star), prefixes, select, star_predicate_var, neededPredicates, filters)
 
+      println("this is getselectcolumnfrom " + columns)
       val str = omitQuestionMark(star)
 
       if (select.contains(str)) {
@@ -110,6 +108,28 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           stopwatch stop()
           val timeTaken = stopwatch.getTime
           println(s"++++++ loading time : $timeTaken")
+        case "cassandra" =>
+          val mycolumns = columns.split(",")
+          val toRemove = "`".toSet
+         var i = 0
+          import com.datastax.spark.connector._
+          val conf = new SparkConf(true).set("spark.cassandra.connection.host", "127.0.0.1")
+          sc.stop()
+          spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(conf).getOrCreate
+          sc = spark.sparkContext
+          val rdd = sc.cassandraTable("db", "product")//.select("id", myheader.mkString(","))
+          mycolumns.foreach{
+            case col =>
+              var s:String = col.split("AS")(0).filterNot(toRemove).trim
+              myheader = myheader :+ s
+              myheaderIndex = myheaderIndex :+ i
+              i = i + 1
+          }
+          println("this is header bb ")
+          println(myheader(0).getBytes(StandardCharsets.UTF_8))
+          println("myheader(0).".getBytes(StandardCharsets.UTF_8))
+          vertex = rdd.map(r=>((edgeId+"00"+r.getLong("id").toString).toLong,myheader.map({i=>r.getString(i)})))
+          vertex.collect.foreach(v=> println(v._1+","+v._2.mkString(", ")))
         case "mongodb" =>
           //spark.conf.set("spark.mongodb.input.uri", "mongodb://127.0.0.1/test.myCollection")
           val values = options.values.toList
@@ -146,16 +166,22 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
         case "neo4j" =>
           import org.neo4j.spark._
+          sc.stop()
+          val config = new SparkConf()
+          config.set(Neo4jConfig.prefix + "url", "bolt://localhost")
+          config.set(Neo4jConfig.prefix + "user", "neo4j")
+          config.set(Neo4jConfig.prefix + "password", "test")
+          spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(config).getOrCreate
+          sc = spark.sparkContext
           val mycolumns = columns.split(",")
           val toRemove = "`".toSet
           var i = 0
           mycolumns.foreach{
             case col =>
-              i = i + 1
               myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
               myheaderIndex = myheaderIndex :+ i
+              i = i + 1
           }
-
           var selected_columns = ""
           mycolumns.foreach(col =>
             selected_columns = selected_columns  + " var."+ col.split("AS")(0).filterNot(toRemove).trim +","
@@ -163,12 +189,14 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           if(!selected_columns.contains("nr")){
             selected_columns = " var.nr, " + selected_columns
           }
+          println("this is i " + myheaderIndex.mkString(","))
+          println("this is header " + myheader.mkString(", "))
+          selected_columns = selected_columns.dropRight(1)
           val values = options.values.toList
           val table_name = values(1)
           val neo = Neo4j(sc)
           val rdd = neo.cypher("MATCH (var:"+table_name+") RETURN " + selected_columns).loadRowRdd
-          rdd.collect.foreach(u=>println(u))
-          vertex = rdd.map(r=>((edgeId+"00"+r.getLong(0).toString).toLong,myheaderIndex.map({i=>r.getString(i)})))
+          vertex = rdd.map(r=>((edgeId+"00"+r.getLong(0).toString).toLong,myheaderIndex.map({i=>r.get(i).toString})))
           vertex.collect.foreach(v=> println(v._1+","+v._2.mkString(", ")))
       }
       if(finalVer == null) {
