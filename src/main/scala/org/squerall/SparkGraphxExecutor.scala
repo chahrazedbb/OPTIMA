@@ -21,9 +21,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   def extractValues(r: ResultSet) = {  (r.getInt(1), r.getString(2))}
 
-  //val values = options.values.toList
-  //print("those are values " + values(0) + ", " + values(1) + ", " + values(2) + ", " + values(3))
-
   def query(sources: mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
             optionsMap_entity: mutable.HashMap[String, (Map[String, String], String)],
             toJoinWith: Boolean,
@@ -43,8 +40,9 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var parSetId = ""
     var finalVer: RDD[(VertexId, Array[String])] = null
 
-    var myheaderIndex : Array[Int] = Array.empty
-    var myheader: Array[String] = Array.empty
+    var finalHeaderIndex : Array[Int] = Array.empty
+    var selectedHeader: Array[String]=Array.empty
+    var finalHeader: Array[String] = Array.empty
     var edgeIdMap : Map[String, Array[String]] = Map.empty
 
     for (s <- sources) {
@@ -57,8 +55,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       val options = optionsMap_entity(sourcePath)._1 // entity is not needed here in SparkExecutor
 
       var columns = getSelectColumnsFromSet(attr_predicate, omitQuestionMark(star), prefixes, select, star_predicate_var, neededPredicates, filters)
-
-      println("this is getselectcolumnfrom " + columns)
       val str = omitQuestionMark(star)
 
       if (select.contains(str)) {
@@ -74,98 +70,46 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           columns = columns + "," + id + " AS " + str + "_ID"
       }
 
+      //getting columns names
+      val toRemove = "`".toSet
+      columns.split(",").foreach (col => finalHeader = finalHeader :+ col.split("AS")(1).filterNot(toRemove).trim)
+      columns.split(",").foreach (col => selectedHeader = selectedHeader :+ col.split("AS")(0).filterNot(toRemove).trim.toLowerCase)//toLowerCase for mongodb since it is case sensitive
+      //vertex
       var vertex: RDD[(VertexId, Array[String])] = null
       var header = ""
 
       sourceType match {
         case "csv" =>
-          val stopwatch: StopWatch = new StopWatch
-          stopwatch start()
-
           val data = sc.textFile(sourcePath)
           //getting the header
           header = data.first()
-
-          //getting column names
-          val mycolumns = columns.split(",")
-          val myheader2 = header.split(",")
-          val toRemove = "`".toSet
-          mycolumns.foreach(col =>
-            if(myheader2.contains(col.split("AS")(0).filterNot(toRemove).trim)) {
-              val  i = myheader2.indexOf(col.split("AS")(0).filterNot(toRemove).trim)
-              myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
-              myheaderIndex = myheaderIndex :+ i
-            }
-          )
+          finalHeaderIndex = getColumnsIndex(header,finalHeader,toRemove)
           //getting data
-          var vertex2 =  data.filter(line => line != header)
-            .map(line =>  line.split(","))
-            .map( parts => ((edgeId+"00"+parts.head).toLong, parts))
-
-          vertex = vertex2.map(v=>(v._1,myheaderIndex.map({i=>v._2(i)})))
-          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
-          println("this is myheader " + myheader.mkString(","))
-          stopwatch stop()
-          val timeTaken = stopwatch.getTime
-          println(s"++++++ loading time : $timeTaken")
+          val all_col_vertex =  data .filter(line => line != header).map(line =>  line.split(",")).map( parts => ((edgeId+"00"+parts.head).toLong, parts))
+          vertex = all_col_vertex.map(v=>(v._1,finalHeaderIndex.map({i=>v._2(i)})))
         case "cassandra" =>
-          val mycolumns = columns.split(",")
-          val toRemove = "`".toSet
-         var i = 0
           import com.datastax.spark.connector._
+          //start new spark contet
           val conf = new SparkConf(true).set("spark.cassandra.connection.host", "127.0.0.1")
           sc.stop()
           spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(conf).getOrCreate
           sc = spark.sparkContext
-          val rdd = sc.cassandraTable("db", "product")//.select("id", myheader.mkString(","))
-          mycolumns.foreach{
-            case col =>
-              var s:String = col.split("AS")(0).filterNot(toRemove).trim
-              myheader = myheader :+ s
-              myheaderIndex = myheaderIndex :+ i
-              i = i + 1
-          }
-          println("this is header bb ")
-          println(myheader(0).getBytes(StandardCharsets.UTF_8))
-          println("myheader(0).".getBytes(StandardCharsets.UTF_8))
-          vertex = rdd.map(r=>((edgeId+"00"+r.getLong("id").toString).toLong,myheader.map({i=>r.getString(i)})))
-          vertex.collect.foreach(v=> println(v._1+","+v._2.mkString(", ")))
+          val values = options.values.toList
+          val rdd = sc.cassandraTable(keyspace = values(0), table = values(1))
+          vertex = rdd.map(r=>((edgeId+"00"+r.getLong("id").toString).toLong,selectedHeader.map({i=>r.getString(i)})))
         case "mongodb" =>
-          //spark.conf.set("spark.mongodb.input.uri", "mongodb://127.0.0.1/test.myCollection")
           val values = options.values.toList
           val mongoConf = if (values.length == 4) makeMongoURI(values(0), values(1), values(2), values(3))
           else makeMongoURI(values(0), values(1), values(2), null)
           val mongoOptions: ReadConfig = ReadConfig(Map("uri" -> mongoConf, "partitioner" -> "MongoPaginateBySizePartitioner"))
-          //df = spark.read.format("com.mongodb.spark.sql").options(mongoOptions.asOptions).load
           val rdd = MongoSpark.load(sc,mongoOptions)
-          //getting the header
-          val mycolumns = columns.split(",")
-          val toRemove = "`".toSet
-          mycolumns.foreach(col =>
-            myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
-          )
-          vertex =  rdd.filter(line => line != header).map(d=>((edgeId+"00"+d.get("id").toString).toLong,mycolumns.map({i=>d.get(i.split("AS")(0).filterNot(toRemove).trim).toString})))
-          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
+          vertex =  rdd.filter(line => line != header).map(d=>((edgeId+"00"+d.get("id").toString).toLong,selectedHeader.map({i=>d.get(i).toString})))
         case "jdbc" =>
-          //df = spark.read.format("jdbc").options(options).load()
-         //new JdbcRDD(sc,() => createConnection(),"SELECT * FROM producer WHERE ? <= id AND id <= ?", lowerBound = 1, upperBound = 3, numPartitions = 2, mapRow = extractValues)
-          //getting the header
-          //getting column names
-          val mycolumns = columns.split(",")
-          val toRemove = "`".toSet
-          mycolumns.foreach(col =>
-              myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
-          )
-          var selected_columns : Array[String] = Array.empty
-          mycolumns.foreach(col =>
-            selected_columns = selected_columns :+ col.split("AS")(0).filterNot(toRemove).trim
-          )
-          val jdbcRDD = LoadSimpleJdbc.getResults(sc,selected_columns,options)
+          val jdbcRDD = LoadSimpleJdbc.getResults(sc,selectedHeader,options)
           vertex = jdbcRDD.map(j=>((edgeId+"00"+j._1.toString).toLong,j._2))
-          println("this is myheader " + myheader.mkString(","))
-          edgeIdMap = Map(str -> Array(edgeId.toString,myheader.mkString(",")))
         case "neo4j" =>
           import org.neo4j.spark._
+          //starting new spark context
           sc.stop()
           val config = new SparkConf()
           config.set(Neo4jConfig.prefix + "url", "bolt://localhost")
@@ -173,37 +117,26 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           config.set(Neo4jConfig.prefix + "password", "test")
           spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(config).getOrCreate
           sc = spark.sparkContext
-          val mycolumns = columns.split(",")
-          val toRemove = "`".toSet
-          var i = 0
-          mycolumns.foreach{
-            case col =>
-              myheader = myheader :+ col.split("AS")(1).filterNot(toRemove).trim
-              myheaderIndex = myheaderIndex :+ i
-              i = i + 1
-          }
           var selected_columns = ""
-          mycolumns.foreach(col =>
-            selected_columns = selected_columns  + " var."+ col.split("AS")(0).filterNot(toRemove).trim +","
+          selectedHeader.foreach(col =>
+            selected_columns = selected_columns  + " var."+ selectedHeader + ","
           )
           if(!selected_columns.contains("nr")){
             selected_columns = " var.nr, " + selected_columns
           }
-          println("this is i " + myheaderIndex.mkString(","))
-          println("this is header " + myheader.mkString(", "))
           selected_columns = selected_columns.dropRight(1)
           val values = options.values.toList
           val table_name = values(1)
           val neo = Neo4j(sc)
           val rdd = neo.cypher("MATCH (var:"+table_name+") RETURN " + selected_columns).loadRowRdd
-          vertex = rdd.map(r=>((edgeId+"00"+r.getLong(0).toString).toLong,myheaderIndex.map({i=>r.get(i).toString})))
-          vertex.collect.foreach(v=> println(v._1+","+v._2.mkString(", ")))
+          vertex = rdd.map(r=>((edgeId+"00"+r.getLong(0).toString).toLong,finalHeaderIndex.map({i=>r.get(i).toString})))
       }
       if(finalVer == null) {
         finalVer = vertex
       } else{
         finalVer = finalVer.union(vertex)
       }
+      edgeIdMap = Map(str -> Array(edgeId.toString,finalHeader.mkString(",")))
     }
 
     val stopwatch: StopWatch = new StopWatch
@@ -232,7 +165,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           val operand_value = conditions.next()
           whereString = column + operand_value._1 + operand_value._2
           //getting the column index in the table
-          val colIndex = myheader.indexOf(column)
+          val colIndex = finalHeader.indexOf(column)
 
           if (operand_value._1 != "regex") {
             if(isAllDigits(operand_value._2)  && operand_value._1.equals("=")){
@@ -278,11 +211,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
     //creating temp edges
     val edge: RDD[Edge[String]] = finalVer.map{(v) => Edge(v._1,v._1, "id")}
-    println("this is the verry first edges ")
-    edge.collect.foreach(e=>println(e.srcId + ", " + e.attr + ", " + e.dstId))
     //creating graphs
     var graph:Graph[Array[String],String] = Graph(finalVer,edge)
-
     (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap)
   }
 
@@ -454,66 +384,80 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     println(s"++++++ joining time : $timeTaken")
 
     jGrah
-    jGrah
   }
 
-  def project(jDF: Any,
-              columnNames: Seq[String],
-              edgeIdMap: Map[String,Array[String]],
-              distinct: Boolean): Graph[Array[String], String] = {
+  def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], distinct: Boolean):
+  (Graph[Array[String], String], Map[String,Array[String]])= {
 
-    println("this is columnNames " + columnNames.mkString(","))
-    println("this is edgeIdMap ")
-    edgeIdMap.values.foreach(v=>println(v.mkString(",")))
-    edgeIdMap.keySet.foreach(k=>println(k.mkString(",")))
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
     var jGP = jDF.asInstanceOf[Graph[Array[String],String]]
 
-    var columnIndexList: Map[String,String]= Map.empty
+    var columnIndexList: Map[String,Array[String]]= Map.empty
     var vertex: RDD[(VertexId, Array[String])] = null
 
+    var stopwatch: StopWatch = new StopWatch
+    stopwatch start()
+    var edgeIdMap2: Map[String,Array[String]] = Map.empty
     //getting columns index
     edgeIdMap.values.foreach{
       case headers =>
         columnNames.foreach{
-          column=>
+          case column=>
             if(headers(1).split(",").contains(column) && !columnIndexList.contains(headers(0) + "," + headers.indexOf(column))){
               val num : Long = headers(1).split(",").indexOf(column)
               if(columnIndexList.keySet.contains(headers(0))){
                 val x = columnIndexList(headers(0))
-                columnIndexList += (headers(0) ->( x + "," + num))
+                columnIndexList += (headers(0) ->Array( x(0) + "," + num,x(1)+","+ column))
               }else{
-                columnIndexList += (headers(0) -> num.toString)
+                columnIndexList += (headers(0) -> Array(num.toString,column))
               }
-
             }
         }
     }
+    stopwatch stop()
+    var timeTaken = stopwatch.getTime
+    println(s"++++++ projection time first method : $timeTaken")
 
+    stopwatch = new StopWatch
+    stopwatch start()
+
+    var i : Int = 0
     columnIndexList.foreach {
       index =>
         if(vertex==null){
           vertex = jGP.vertices.filter( v=>
             ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
             .map(v=>(v._1,
-              index._2.split(",").map({i=>v._2(i.toInt)})
+              index._2(0).split(",").map({i=>v._2(i.toInt)})
             ))
         }else{
           vertex = vertex.union(jGP.vertices.filter( v=>
             ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
             .map(v=>(v._1,
-              index._2.split(",").map({i=>v._2(i.toInt)})
+              index._2(0).split(",").map({i=>v._2(i.toInt)})
             )))
+        }
+        //getting indexes of columns after projection
+        index._2(1).split(",").foreach{
+           x =>
+             edgeIdMap2 += (i.toString -> Array(i.toString,x))
+             i = i + 1
         }
     }
 
-    var att = ""
-    jGP.edges.collect.foreach(e => att = e.attr)
+    stopwatch stop()
+    timeTaken = stopwatch.getTime
+    println(s"++++++ projection time secon method : $timeTaken")
 
-    if(vertex!=null && att!=""){
-      jGP = Graph(vertex,jGP.edges)
-      jGP = jGP.subgraph(vpred = (vid,vd)=>vd!=null)
+    stopwatch = new StopWatch
+    stopwatch start()
+
+   // var att = ""
+    //jGP.edges.collect.foreach(e => att = e.attr)
+
+    if(vertex!=null/* && att!=""*/){
+      val edges = jGP.edges
+      jGP = Graph(vertex,edges)
+      //jGP = jGP.subgraph(vpred = (vid,vd)=>vd!=null)
       if(jGP.edges.count()==0){
         //creating temp edges
         val edge: RDD[Edge[String]] = vertex.map{(v) => Edge(v._1,v._1, "id")}
@@ -523,20 +467,16 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     }
 
     stopwatch stop()
-    val timeTaken = stopwatch.getTime
-    println(s"++++++ projection time : $timeTaken")
+    timeTaken = stopwatch.getTime
+    println(s"++++++ projection time third method : $timeTaken")
 
-    jGP
+    (jGP,edgeIdMap2)
 
   }
 
   def orderBy(jDF: Any, direction: String, variable: String):
   Graph[Array[String], String] = {
     val graph = jDF.asInstanceOf[Graph[Array[String], String]]
-    println("this is the order by vertices")
-    graph.vertices.collect.foreach(v=>println(v._1 + ", " + v._2.mkString(", ")))
-    println("this is the order by edges")
-    graph.edges.collect.foreach(e=>println(e.srcId+", " + e.dstId + ", " + e.attr))
     graph
   }
 
@@ -550,25 +490,27 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     joinPS.asInstanceOf[Graph[Array[String],String]]
   }
 
-  def show(PS: Any): Unit = {
+  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]]): Unit = {
     val stopwatch: StopWatch = new StopWatch
     stopwatch start()
-    var graph = PS.asInstanceOf[Graph[Array[String],String]]
-    //graph = Graph(graph.vertices.filter((v)=>v._2!=null),graph.edges)
-    // graph = graph.subgraph(vpred = (vid,vd)=>vd!=null)
-      graph.triplets.
-        map(triplet =>"["+ triplet.srcAttr.mkString(",") + "]")
-        .collect().distinct
+    val graph = PS.asInstanceOf[Graph[Array[String],String]]
+    val dex= getSingleColumnIndex(edgeIdMap,variable)
+      graph
+        .triplets
+        .sortBy(_.srcAttr(dex))
+        .map(triplet =>"["+ triplet.srcAttr.mkString(",") + "]")
+        .collect()
+        .distinct
+        .take(20)
         .foreach(println(_))
     stopwatch stop()
     val timeTaken = stopwatch.getTime
     println(s"++++++ show time : $timeTaken")
-
     println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
   }
 
-  def run(jDF: Any): Unit = {
-    this.show(jDF)
+  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]]): Unit = {
+    this.show(jDF,  variable, edgeIdMap)
   }
 
 
@@ -576,6 +518,40 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   def count(joinPS: Graph[Array[String], String]): VertexId = {
     joinPS.asInstanceOf[Graph[Array[String], String]].edges.count()
+  }
+
+  def getColumnsIndex(header: String, columns: Array[String], toRemove: Set[Char]) : Array[Int] = {
+    var finalHeaderIndex:Array[Int]= Array.empty
+    val headerArray = header.split(",")
+    columns.foreach(col=>
+      if(headerArray.contains(col.split("AS")(0).filterNot(toRemove).trim)) {
+        val  i = headerArray.indexOf(col.split("AS")(0).filterNot(toRemove).trim)
+        finalHeaderIndex = finalHeaderIndex :+ i
+      }
+    )
+    finalHeaderIndex
+  }
+  //        edgeIdMap2 += (index._1 -> Array(i,index._2(1)))
+  def getSingleColumnIndex(edgeIdMap : Map[String, Array[String]] , variable : String) : Int =
+  {
+    import scala.util.control.Breaks._
+    //var columnIndexList: Map[String,String]= Map.empty
+
+    val stopwatch:StopWatch = new StopWatch
+    stopwatch start()
+    var num: Int = 0
+    edgeIdMap.values.foreach{
+      headers =>
+            if(headers(1).contains(variable)){
+              num = headers(0).toInt
+            }
+    }
+    stopwatch stop()
+    val timeTaken = stopwatch.getTime
+    println(s"++++++ orderby " +
+      s" method : $timeTaken")
+
+    num
   }
 
 }

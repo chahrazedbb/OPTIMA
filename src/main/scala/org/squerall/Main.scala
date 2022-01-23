@@ -10,13 +10,11 @@ import org.squerall.model.DataQueryFrame
   * Created by mmami on 26.01.17.
   */
 object Main extends App {
-
-
     val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
     val executorID = "local" //jdbc:presto://localhost:8080"//args(3)//"local"
     val reorderJoin = "n"//args(4)
-    val queryEngine = "g"//args(5)
+    val queryEngine = "s"//args(5)
 
     var timeTable = new Array[Double](20)
 

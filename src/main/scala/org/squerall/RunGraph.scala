@@ -14,8 +14,10 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     val logger = Logger("Squerall")
 
+    var variable = ""
     var num = 0
     var edgeIdMap: Map[String,Array[String]] = Map.empty
+    var edgeIdMap2: Map[String,Array[String]] = Map.empty
     //var sc: Any = null
     // 1. Read SPARQL query
     logger.info("Starting QUERY ANALYSIS")
@@ -310,15 +312,16 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       logger.info(s"ORDER BY list: $orderByList (-1 ASC, -2 DESC)") // TODO: (-1 ASC, -2 DESC) confirm with multiple order-by's
 
       for (o <- orderByList) {
-        val variable = o._1
+        variable = o._1
         val direction = o._2
-
         finalDataSet = executor.orderBy(finalDataSet, direction, variable)
       }
     }
 
     logger.info("|__ Has distinct? " + distinct)
-    finalDataSet = executor.project(finalDataSet, columnNames,edgeIdMap, distinct)
+    val (finalDataSet1,edgeIdMap1) = executor.project(finalDataSet, columnNames,edgeIdMap, distinct)
+    finalDataSet = finalDataSet1
+    edgeIdMap2 = edgeIdMap1
 
     if (limit > 0)
       finalDataSet = executor.limit(finalDataSet, limit)
@@ -328,7 +331,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     val startTimeMillis = System.currentTimeMillis()
 
-    executor.run(finalDataSet)
+    executor.run(finalDataSet, variable ,edgeIdMap2)
 
     val endTimeMillis = System.currentTimeMillis()
     val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
