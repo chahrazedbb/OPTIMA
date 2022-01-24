@@ -296,7 +296,9 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     logger.info(s"--> SELECTED column names: $columnNames") // TODO: check the order of PROJECT and ORDER-BY
 
+    var orderby: Boolean = false
     if (orderBys != null) {
+      orderby = true
       logger.info(s"orderBys: $orderBys")
 
       var orderByList: Set[(String, String)] = Set()
@@ -314,24 +316,24 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       for (o <- orderByList) {
         variable = o._1
         val direction = o._2
-        finalDataSet = executor.orderBy(finalDataSet, direction, variable)
+        //finalDataSet = executor.orderBy(finalDataSet, direction, variable)
       }
     }
 
     logger.info("|__ Has distinct? " + distinct)
-    val (finalDataSet1,edgeIdMap1) = executor.project(finalDataSet, columnNames,edgeIdMap, distinct)
+    val (finalDataSet1,edgeIdMap1) = executor.project(finalDataSet, columnNames,edgeIdMap, orderby)
     finalDataSet = finalDataSet1
     edgeIdMap2 = edgeIdMap1
 
-    if (limit > 0)
-      finalDataSet = executor.limit(finalDataSet, limit)
+    //if (limit > 0)
+    //  finalDataSet = executor.limit(finalDataSet, limit)
 
     //val stopwatch: StopWatch = new StopWatch
     //stopwatch start()
 
     val startTimeMillis = System.currentTimeMillis()
 
-    executor.run(finalDataSet, variable ,edgeIdMap2)
+    executor.run(finalDataSet, variable ,edgeIdMap2, limit, orderby, distinct)
 
     val endTimeMillis = System.currentTimeMillis()
     val durationSeconds = (endTimeMillis - startTimeMillis) // 1000

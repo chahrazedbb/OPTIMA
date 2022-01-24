@@ -10,6 +10,8 @@ import org.squerall.model.DataQueryFrame
   * Created by mmami on 26.01.17.
   */
 object Main extends App {
+
+
     val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/mappings.ttl"//args(1)
     val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/config"//args(2)
     val executorID = "local" //jdbc:presto://localhost:8080"//args(3)//"local"
@@ -18,12 +20,12 @@ object Main extends App {
 
     var timeTable = new Array[Double](20)
 
-    for( a <- 1 to 1) {
+    for( a <- 3 to 3) {
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
 
       //  var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q"+a+".sparql" //args(0)
-      var queryFile = "/home/chahrazed/queries/validating_queries/q"+a+".sparql" //args(0)
+      var queryFile = "/home/chahrazed/queries/q"+a+".sparql" //args(0)
 
         if (queryEngine == "s") { // Spark as  query engine
             val executor: SparkExecutor = new SparkExecutor(executorID, mappingsFile)
