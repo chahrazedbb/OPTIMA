@@ -2,6 +2,7 @@ package org.squerall
 
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
+import org.apache.spark.SparkContext
 import org.squerall.Helpers._
 
 import scala.collection.JavaConversions._
@@ -13,13 +14,17 @@ class Run[A] (executor: QueryExecutor[A]) {
 
   private var finalDataSet: A = _
 
-  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String) {
-
+  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String)
+  : (Double,Long,Long,Long,Long,Int) = {
     val logger = Logger("Squerall")
 
     var num = 0
     var edgeIdMap: Map[String,Int] = Map.empty
-    var sc: Any = null
+    var sc: SparkContext = null
+
+    var stopwatch: StopWatch = new StopWatch
+    stopwatch start()
+
     // 1. Read SPARQL query
     logger.info("Starting QUERY ANALYSIS")
 
@@ -103,6 +108,13 @@ class Run[A] (executor: QueryExecutor[A]) {
     var parsetIDs : Map[String, String] = Map() // Used when subject variables are projected out
 
     logger.info("---> GOING NOW TO COLLECT DATA")
+
+    stopwatch stop()
+    val  Query_Analysis= stopwatch.getTime
+    //   logger.info("---> GOING NOW TO COLLECT DATA")
+
+    stopwatch  = new StopWatch
+    stopwatch start()
 
     for (s <- results) {
       num = num + 1
@@ -189,11 +201,11 @@ class Run[A] (executor: QueryExecutor[A]) {
 
         sc = scc
 
-       /* if(edgeIdMap.isEmpty){
-          edgeIdMap = mymap
-        }else{
-          edgeIdMap = edgeIdMap ++ mymap
-        }*/
+        /* if(edgeIdMap.isEmpty){
+           edgeIdMap = mymap
+         }else{
+           edgeIdMap = edgeIdMap ++ mymap
+         }*/
 
 
         if (parsetID != "")
@@ -228,8 +240,15 @@ class Run[A] (executor: QueryExecutor[A]) {
       }
     }
 
+    stopwatch stop()
+    val Relevant_Source_Detection = stopwatch.getTime
+
     logger.info("QUERY EXECUTION starting...*/")
     logger.info(s"DataFrames: $star_df")
+
+    stopwatch  = new StopWatch
+    stopwatch start()
+
 
     if (starsNbr > 1) {
       logger.info(s"- Here are the (Star, ParSet) pairs:")
@@ -326,12 +345,9 @@ class Run[A] (executor: QueryExecutor[A]) {
     }
 
     logger.info("|__ Has distinct? " + distinct)
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
+
     finalDataSet = executor.project(finalDataSet, columnNames, distinct)
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
-    println(s"++++++ projection time : $timeTaken")
+
     if (limit > 0) {
       val stopwatch: StopWatch = new StopWatch
       stopwatch start()
@@ -347,16 +363,21 @@ class Run[A] (executor: QueryExecutor[A]) {
 
     val startTimeMillis = System.currentTimeMillis()
 
-    executor.run(finalDataSet)
+    val nb_resuts = executor.run(finalDataSet)
 
     val endTimeMillis = System.currentTimeMillis()
     val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
     println("Time taken solely by the actual query execution" + durationSeconds)
 
-    //stopwatch stop()
+    stopwatch stop()
+    val Query_Execution = stopwatch.getTime
 
-    //val timeTaken = stopwatch.getTime
+    val memo = sc.getExecutorMemoryStatus.values.toList
+    val max_memo = memo(0)._1
+    val remain_memo = memo(0)._2
+    val memo_usage =(max_memo-remain_memo)
+    val cpu = sc.defaultParallelism
+    (nb_resuts,Query_Analysis,Relevant_Source_Detection,Query_Execution,memo_usage,cpu)
 
-    //println(s"Time taken solely by the actual query execution: $timeTaken")
   }
 }

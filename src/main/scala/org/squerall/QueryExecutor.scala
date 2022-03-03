@@ -1,8 +1,8 @@
 package org.squerall
 
 import java.util
-
 import com.google.common.collect.ArrayListMultimap
+import org.apache.spark.SparkContext
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -27,7 +27,7 @@ trait QueryExecutor[T] { // T is a ParSet (Parallel dataSet)
               rightJoinTransformations: Array[String],
               joinPairs: Map[(String,String), String],
               edgeId:Int
-             ) : (T, Integer, String, Map[String, Int],Any)
+             ) : (T, Integer, String, Map[String, Int],SparkContext)
 
     /* Transforms a ParSet to another ParSet based on the SPARQL TRANSFORM clause */
     def transform(ps: Any, column: String, transformationsArray : Array[String]): Any
@@ -54,8 +54,8 @@ trait QueryExecutor[T] { // T is a ParSet (Parallel dataSet)
     def limit(joinPS: Any, limitValue: Int) : T
 
     /* Show some results */
-    def show(PS: Any)
+    def show(PS: Any) : Double
 
     /* Compute the results */
-    def run(jDF: Any)
+    def run(jDF: Any) : Double
 }

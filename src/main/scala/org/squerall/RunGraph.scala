@@ -1,7 +1,9 @@
 package org.squerall
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
+import org.apache.spark.SparkContext
 import org.squerall.Helpers._
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
@@ -10,16 +12,20 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
   private var finalDataSet: A = _
 
-  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String) {
-
+  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String)
+  : (Double,Long,Long,Long,Long,Int) =
+  {
     val logger = Logger("Squerall")
 
     var variable = ""
     var num = 0
     var edgeIdMap: Map[String,Array[String]] = Map.empty
     var edgeIdMap2: Map[String,Array[String]] = Map.empty
-    //var sc: Any = null
+    var sc: SparkContext = null
     // 1. Read SPARQL query
+    var stopwatch: StopWatch = new StopWatch
+    stopwatch start()
+
     logger.info("Starting QUERY ANALYSIS")
 
     val queryString = scala.io.Source.fromFile(queryFile)
@@ -101,6 +107,11 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     var starDataTypesMap: Map[String, mutable.Set[String]] = Map()
     var parsetIDs : Map[String, String] = Map() // Used when subject variables are projected out
 
+    stopwatch stop()
+    val Query_Analysis = stopwatch.getTime
+
+    stopwatch  = new StopWatch
+    stopwatch start()
     logger.info("---> GOING NOW TO COLLECT DATA")
 
     for (s <- results) {
@@ -184,9 +195,9 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
       // TODO: the else block looks like not being reached, check it
       if (joinedToFlag.contains(star) || joinedFromFlag.contains(star)) {
-        val (ds, numberOfFiltersOfThisStar, parsetID ,mymap) = executor.query(dataSources, options, toJoinWith = true, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
+        val (ds, numberOfFiltersOfThisStar, parsetID ,mymap, scc) = executor.query(dataSources, options, toJoinWith = true, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
 
-        //sc = scc
+        sc = scc
 
         if(edgeIdMap.isEmpty){
           edgeIdMap = mymap
@@ -206,8 +217,8 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
         //ds.printSchema() // SEE WHAT TO DO HERE TO SHOW BACK THE SCHEMA - MOVE IN SPARKEXECUTOR
       } else if (!joinedToFlag.contains(star) && !joinedFromFlag.contains(star)) {
 
-        val (ds, numberOfFiltersOfThisStar, parsetID, mymap) = executor.query(dataSources, options, toJoinWith = false, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
-        //sc = scc
+        val (ds, numberOfFiltersOfThisStar, parsetID, mymap, scc) = executor.query(dataSources, options, toJoinWith = false, star, prefixes, select, star_predicate_var, neededPredicatesAll, filters, leftJoinTransformations, rightJoinTransformations, joinPairs, num)
+        sc = scc
 
         //ds.printSchema() // SEE WHAT TO DO HERE TO SHOW BACK THE SCHEMA - MOVE IN SPARKEXECUTOR
 
@@ -226,6 +237,12 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
         logger.info("single...with ParSet schema: " + ds)
       }
     }
+
+    stopwatch stop()
+    val Relevant_Source_Detection = stopwatch.getTime
+
+    stopwatch  = new StopWatch
+    stopwatch start()
 
     logger.info("QUERY EXECUTION starting...*/")
     logger.info(s"DataFrames: $star_df")
@@ -333,16 +350,27 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     val startTimeMillis = System.currentTimeMillis()
 
-    executor.run(finalDataSet, variable ,edgeIdMap2, limit, orderby, distinct)
+    val nb_resuts  = executor.run(finalDataSet, variable ,edgeIdMap2, limit, orderby, distinct)
 
-    val endTimeMillis = System.currentTimeMillis()
-    val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
-    println("Time taken solely by the actual query execution" + durationSeconds)
+ //   val endTimeMillis = System.currentTimeMillis()
+ //   val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
+//    println("Time taken solely by the actual query execution" + durationSeconds)
 
     //stopwatch stop()
 
     //val timeTaken = stopwatch.getTime
 
     //println(s"Time taken solely by the actual query execution: $timeTaken")
+    stopwatch stop()
+    val Query_Execution = stopwatch.getTime
+
+    val memo = sc.getExecutorMemoryStatus.values.toList
+    val max_memo = memo(0)._1
+    val remain_memo = memo(0)._2
+    val memo_usage =(max_memo-remain_memo)
+    val cpu = sc.defaultParallelism
+
+    (nb_resuts,Query_Analysis,Relevant_Source_Detection,Query_Execution,memo_usage,cpu)
+
   }
 }

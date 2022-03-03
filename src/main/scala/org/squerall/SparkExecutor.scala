@@ -5,7 +5,7 @@ import com.google.common.collect.ArrayListMultimap
 import com.mongodb.spark.config.ReadConfig
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, SparkSession}
@@ -38,7 +38,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
               rightJoinTransformations: Array[String],
               joinPairs: Map[(String,String), String],
               edgeId:Int
-             ): (DataFrame, Integer, String, Map[String, Int], Any) = {
+             ): (DataFrame, Integer, String, Map[String, Int], SparkContext) = {
 
         val config = new SparkConf()
         config.set(Neo4jConfig.prefix + "url", "bolt://localhost")
@@ -95,7 +95,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                 case "csv" =>
                     val stopwatch: StopWatch = new StopWatch
                     stopwatch start()
-                        df = spark.read.options(options).csv(sourcePath)
+                    df = spark.read.options(options).csv(sourcePath)
                     stopwatch stop()
                     val timeTaken = stopwatch.getTime
                     println(s"++++++ loading time : $timeTaken")
@@ -163,8 +163,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             }
         }
 
-     // println("this is is is is clumns of finaldf " + finalDF.columns.mkString(","))
-     // finalDF.show(20)
+        // println("this is is is is clumns of finaldf " + finalDF.columns.mkString(","))
+        // finalDF.show(20)
 
         logger.info("- filters: " + filters + " for star " + star)
 
@@ -221,7 +221,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         // logger.info("Number of Spark executors (JUST FOR TEST): " + spark.sparkContext.statusTracker.getExecutorInfos.length)
         // logger.info("Master URI (JUST FOR TEST): " + spark.sparkContext.master)
 
-      (finalDF, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, null)
+        (finalDF, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
     }
 
     def transform(df: Any, column: String, transformationsArray : Array[String]): DataFrame = {
@@ -613,7 +613,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
     def limit(jDF: Any, limitValue: Int) : DataFrame = jDF.asInstanceOf[DataFrame].limit(limitValue)
 
-    def show(jDF: Any): Unit = {
+    def show(jDF: Any): Double = {
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
 
@@ -628,14 +628,16 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         println(columns.mkString(","))
         df.foreach(x => println(x))
 
-        println(s"Number of results: ${jDF.asInstanceOf[DataFrame].count()}")
+      //  println(s"Number of results: ${jDF.asInstanceOf[DataFrame].count()}")
 
         stopwatch stop()
         val timeTaken = stopwatch.getTime
         println(s"Time taken by show method: $timeTaken")
+
+        jDF.asInstanceOf[DataFrame].count()
     }
 
-    def run(jDF: Any): Unit = {
+    def run(jDF: Any): Double = {
         this.show(jDF)
     }
 }

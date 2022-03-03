@@ -30,7 +30,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String, String), String], edgeId: Int):
-  (Graph[Array[String],String],Integer,String,Map[String,Array[String]])  = {
+  (Graph[Array[String],String],Integer,String,Map[String,Array[String]],SparkContext)  = {
     var spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
     var sc = spark.sparkContext
     var dataSource_count = 0
@@ -40,6 +40,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var finalHeaderIndex : Array[Int] = Array.empty
     var selectedHeader: Array[String]=Array.empty
     var finalHeader: Array[String] = Array.empty
+    var finalHeader2: Array[String] = Array.empty
     var edgeIdMap : Map[String, Array[String]] = Map.empty
 
     for (s <- sources) {
@@ -70,6 +71,14 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       //getting columns names
       val toRemove = "`".toSet
       columns.split(",").foreach (col => finalHeader = finalHeader :+ col.split("AS")(1).filterNot(toRemove).trim)
+      columns.split(",").foreach {
+        col =>
+          if(col.contains("_")){
+            finalHeader2 = finalHeader2 :+ col.split("AS")(1).split("_")(1).filterNot(toRemove).trim
+          }else{
+            finalHeader2 = finalHeader2 :+ col.split("AS")(1).filterNot(toRemove).trim
+          }
+      }
       columns.split(",").foreach (col => selectedHeader = selectedHeader :+ col.split("AS")(0).filterNot(toRemove).trim.toLowerCase)//toLowerCase for mongodb since it is case sensitive
       //vertex
       var vertex: RDD[(VertexId, Array[String])] = null
@@ -84,12 +93,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //getting data
           val all_col_vertex =  data .filter(line => line != header).map(line =>  line.split(",")).map( parts => ((edgeId+"00"+parts.head).toLong, parts))
           vertex = all_col_vertex.map(v=>(v._1,finalHeaderIndex.map({i=>v._2(i)})))
-          println("this is finalHeaderIndex " + finalHeaderIndex.mkString(","))
-          println("this is header " + header)
-          println("this is finalHeader " + finalHeader.mkString(","))
-          println("this is toRemove " + toRemove)
-          vertex.collect.foreach(v=>println(v._1+","+v._2.mkString(",")))
-
         case "cassandra" =>
           import com.datastax.spark.connector._
           //start new spark contet
@@ -139,11 +142,9 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       } else{
         finalVer = finalVer.union(vertex)
       }
-      edgeIdMap = Map(str -> Array(edgeId.toString,finalHeader.mkString(",")))
+      edgeIdMap = Map(str -> Array(edgeId.toString,finalHeader.mkString(","),finalHeader2.mkString(",")))
     }
 
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
     var whereString = ""
 
     var nbrOfFiltersOfThisStar = 0
@@ -208,15 +209,11 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         }
       }
     }
-
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
-
     //creating temp edges
     val edge: RDD[Edge[String]] = finalVer.map{(v) => Edge(v._1,v._1, "id")}
     //creating graphs
     var graph:Graph[Array[String],String] = Graph(finalVer,edge)
-    (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap)
+    (graph, nbrOfFiltersOfThisStar, parSetId, edgeIdMap, sc)
   }
 
   def transform(ps: Any, column: String, transformationsArray: Array[String]): Any = {
@@ -228,9 +225,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
            star_df: Map[String, Graph[Array[String],String]],
            edgeIdMap: Map[String,Array[String]])
   :Graph[Array[String],String] = {
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
-
     import scala.collection.JavaConversions._
     import scala.collection.mutable.ListBuffer
 
@@ -293,7 +287,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
           //getting the fk column
           val colIndex = header1.split(",").indexOf(fk)
-          //creating the edges
+          //creating the edgesmap
           val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
           //creating the graph
           jGrah = Graph(jGrah.vertices.union(vertex2).filter((v)=>v._2!=null)
@@ -380,12 +374,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       }
       pendingJoins = pendingJoins.tail
     }
-
-
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
-    println(s"++++++ joining time : $timeTaken")
-
     jGrah
   }
 
@@ -397,16 +385,17 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     var columnIndexList: Map[String,Array[String]]= Map.empty
     var vertex: RDD[(VertexId, Array[String])] = null
 
-    var stopwatch: StopWatch = new StopWatch
-    stopwatch start()
     var edgeIdMap2: Map[String,Array[String]] = Map.empty
 
+    println("column names " + columnNames.mkString(","))
+    println("edgeIdMap " + edgeIdMap.keySet.mkString(","))
+    edgeIdMap.values.foreach(v => println(v.mkString(",")))
     //getting columns index
     edgeIdMap.values.foreach{
       case headers =>
         columnNames.foreach{
           case column=>
-            if(headers(1).split(",").contains(column) && !columnIndexList.contains(headers(0) + "," + headers.indexOf(column))){
+            if(headers(1).split(",").contains(column) && !columnIndexList.contains(headers(0) + "," + headers(2).split(",").indexOf(column))){
               val num : Long = headers(1).split(",").indexOf(column)
               if(columnIndexList.keySet.contains(headers(0))){
                 val x = columnIndexList(headers(0))
@@ -417,22 +406,15 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             }
         }
     }
-    stopwatch stop()
-    var timeTaken = stopwatch.getTime
-    println(s"++++++ projection time first method : $timeTaken")
-
-    stopwatch = new StopWatch
-    stopwatch start()
-
+    println("keys " + columnIndexList.keySet.mkString(","))
+    columnIndexList.values.foreach(v=>println(v.mkString(",")))
     var i : Int = 0
     columnIndexList.foreach {
       index =>
         if(vertex==null){
-          println("this is index._2(0).split(\",\") " + index._2(0).split(",").mkString(","))
           vertex = jGP.vertices.filter( v=>
             ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
-            .map(v=>(v._1, index._2(0).split(",").map({i=>v._2(i.toInt)})
-            ))
+            .map(v=>(v._1, index._2(0).split(",").map({i=>v._2((i.toInt))})))
         }else{
           vertex = vertex.union(jGP.vertices.filter( v=>
             ((index._1+"00").equals(v._1.toString.take(3)) && index._1.toInt > -1))
@@ -441,20 +423,13 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         }
         //getting indexes of columns after projection
         index._2(1).split(",").foreach{
-           x =>
-             edgeIdMap2 += (i.toString -> Array(i.toString,x))
-             i = i + 1
+          x =>
+            edgeIdMap2 += (i.toString -> Array(i.toString,x))
+            i = i + 1
         }
     }
 
-    stopwatch stop()
-    timeTaken = stopwatch.getTime
-    println(s"++++++ projection time secon method : $timeTaken")
-
-    stopwatch = new StopWatch
-    stopwatch start()
-
-   // var att = ""
+    // var att = ""
     //jGP.edges.collect.foreach(e => att = e.attr)
 
     if(vertex!=null/* && att!=""*/){
@@ -468,10 +443,6 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         jGP = Graph(vertex,edge)
       }
     }
-
-    stopwatch stop()
-    timeTaken = stopwatch.getTime
-    println(s"++++++ projection time third method : $timeTaken")
 
     (jGP,edgeIdMap2)
   }
@@ -492,9 +463,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     joinPS.asInstanceOf[Graph[Array[String],String]]
   }
 
-  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct: Boolean): Unit = {
-    val stopwatch: StopWatch = new StopWatch
-    stopwatch start()
+  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct: Boolean): Double = {
     val graph = PS.asInstanceOf[Graph[Array[String],String]]
     var triples = graph.triplets
     if(orderby){
@@ -508,14 +477,13 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     if(limit>0) {
       results = results.take(limit)
     }
-    results.foreach(println(_))
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
-    println(s"++++++ show time : $timeTaken")
-    println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
+    results.take(10).foreach(println(_))
+    //  println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
+    (results.length)
   }
 
-  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean): Unit = {
+
+  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean): Double = {
     this.show(jDF,  variable, edgeIdMap, limit, orderby, distinct)
   }
 
@@ -528,7 +496,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
   def getColumnsIndex(header: String, columns: Array[String], toRemove: Set[Char]) : Array[Int] = {
     var finalHeaderIndex:Array[Int]= Array.empty
-    val headerArray = header.split(",")
+    val headerArray = header.toLowerCase().split(",")
     columns.foreach { col =>
       if (headerArray.contains(col)) {
         val i = headerArray.indexOf(col)
@@ -542,22 +510,13 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
   {
     import scala.util.control.Breaks._
     //var columnIndexList: Map[String,String]= Map.empty
-
-    val stopwatch:StopWatch = new StopWatch
-    stopwatch start()
     var num: Int = 0
     edgeIdMap.values.foreach{
       headers =>
-            if(headers(1).contains(variable)){
-              num = headers(0).toInt
-            }
+        if(headers(1).contains(variable)){
+          num = headers(0).toInt
+        }
     }
-    stopwatch stop()
-    val timeTaken = stopwatch.getTime
-    println(s"++++++ orderby " +
-      s" method : $timeTaken")
-
     num
   }
-
 }

@@ -5,6 +5,7 @@ import java.util
 import com.google.common.collect.ArrayListMultimap
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.DataFrame
 import org.squerall.Helpers._
 import org.squerall.model.DataQueryFrame
@@ -36,7 +37,7 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
               rightJoinTransformations: Array[String],
               joinPairs: Map[(String,String), String],
               edgeId:Int
-             ): (DataQueryFrame, Integer, String,  Map[String, Int], Any) = {
+             ): (DataQueryFrame, Integer, String,  Map[String, Int], SparkContext) = {
 
         //val spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate;
         //spark.sparkContext.setLogLevel("ERROR")
@@ -438,7 +439,7 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
         jDQF.asInstanceOf[DataQueryFrame]
     }
 
-    def show(jDQF: Any) = {
+    def show(jDQF: Any):Double = {
 
         val stopwatch: StopWatch = new StopWatch
         stopwatch start()
@@ -559,10 +560,10 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
         stopwatch stop()
         val timeTaken = stopwatch.getTime
         println(s"++++++ show time : $timeTaken")
-
+        0.0
     }
 
-    def run(jDF: Any) = {
+    def run(jDF: Any):Double = {
         // TODO: jDF isn't used here, figure it out
         this.show(jDF)
 
@@ -592,12 +593,13 @@ class PrestoExecutor(prestoURI: String, mappingsFile: String) extends QueryExecu
                 logger.info(row)
                 count += 1
             }
+            0.0
         } catch  {
             case e: Exception => e.printStackTrace()
+                0.0
         } finally {
             connection.close()
         }
-
     }
 
 }

@@ -1,6 +1,7 @@
 package org.squerall
 
 import com.google.common.collect.ArrayListMultimap
+import org.apache.spark.SparkContext
 import org.apache.spark.graphx.VertexId
 import org.apache.spark.rdd.RDD
 
@@ -24,7 +25,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String,String), String],
             edgeId:Int
-           ) : (T, Integer, String, Map[String, Array[String]])
+           ) : (T, Integer, String, Map[String, Array[String]], SparkContext)
 
   /* Transforms a ParSet to another ParSet based on the SPARQL TRANSFORM clause */
   def transform(ps: Any, column: String, transformationsArray : Array[String]): Any
@@ -51,8 +52,8 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   def limit(joinPS: Any, limitValue: Int) : T
 
   /* Show some results */
-  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]],limit: Int, orderby: Boolean, distinct: Boolean)
+  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]],limit: Int, orderby: Boolean, distinct: Boolean) : Double
 
   /* Compute the results */
-  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean)
+  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean) : Double
 }
