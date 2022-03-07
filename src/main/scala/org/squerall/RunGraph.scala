@@ -12,9 +12,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
   private var finalDataSet: A = _
 
-  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String)
-  : (Double,Long,Long,Long,Long,Int) =
-  {
+  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String): (Array[String],Array[String]) = {
     val logger = Logger("Squerall")
 
     var variable = ""
@@ -22,6 +20,8 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     var edgeIdMap: Map[String,Array[String]] = Map.empty
     var edgeIdMap2: Map[String,Array[String]] = Map.empty
     var sc: SparkContext = null
+    var nb_filter = 0
+
     // 1. Read SPARQL query
     var stopwatch: StopWatch = new StopWatch
     stopwatch start()
@@ -31,7 +31,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     val queryString = scala.io.Source.fromFile(queryFile)
     var query = try queryString.mkString finally queryString.close()
 
-    println(s"Going to execute the query: \n$query")
+   // println(s"Going to execute the query: \n$query")
 
     // 'SPARQL' Transformations
     var transformExist = false
@@ -213,6 +213,8 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
         starNbrFilters += star -> numberOfFiltersOfThisStar
 
+        nb_filter = nb_filter +  numberOfFiltersOfThisStar
+
         logger.info("join...with ParSet schema: " + ds)
         //ds.printSchema() // SEE WHAT TO DO HERE TO SHOW BACK THE SCHEMA - MOVE IN SPARKEXECUTOR
       } else if (!joinedToFlag.contains(star) && !joinedFromFlag.contains(star)) {
@@ -247,39 +249,6 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     logger.info("QUERY EXECUTION starting...*/")
     logger.info(s"DataFrames: $star_df")
 
-    if (starsNbr > 1) {
-      logger.info(s"- Here are the (Star, ParSet) pairs:")
-      logger.info("Join Pairs: " + joinPairs)
-
-      if (starsNbr > 1) logger.info(s"- Here are join pairs: $joins") else logger.info("No join detected.")
-      logger.info(s"- Number of predicates per star: $starNbrFilters ")
-
-      val starWeights = pl.sortStarsByWeight(starDataTypesMap, starNbrFilters, configFile)
-      logger.info(s"- Stars weighted (performance + nbr of filters): $starWeights \n")
-
-      val sortedScoredJoins = pl.reorder(joins, starDataTypesMap, starNbrFilters, starWeights, configFile)
-      logger.info(s"- Sorted scored joins: $sortedScoredJoins")
-      val startingJoin = sortedScoredJoins.head
-
-      // Convert starting join to: (leftStar, (rightStar, joinVar)) so we can remove it from $joins
-      var firstJoin: (String, (String, String)) = null
-      for (j <- joins.entries) {
-        if (j.getKey == startingJoin._1._1 && j.getValue._1 == startingJoin._1._2)
-          firstJoin = startingJoin._1._1 -> (startingJoin._1._2, j.getValue._2)
-      }
-      logger.info(s"- Starting join: $firstJoin \n")
-
-      // Final global join
-      finalDataSet = executor.join(joins, prefixes, star_df, edgeIdMap)
-
-      //finalDataSet.asInstanceOf[DataFrame].printSchema()
-
-      // finalDataSet = executor.joinReordered(joins, prefixes, star_df, firstJoin, starWeights)
-    } else {
-      logger.info(s" Single star query")
-      finalDataSet = star_df.head._2
-    }
-
     // Project out columns from the final global join results
     var columnNames = Seq[String]()
     logger.info(s"--> Needed predicates select: $neededPredicatesSelect")
@@ -313,8 +282,11 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     logger.info(s"--> SELECTED column names: $columnNames") // TODO: check the order of PROJECT and ORDER-BY
 
+
+    var nb_orderby = 0
     var orderby: Boolean = false
     if (orderBys != null) {
+      nb_orderby = orderBys.size
       orderby = true
       logger.info(s"orderBys: $orderBys")
 
@@ -336,6 +308,40 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
         //finalDataSet = executor.orderBy(finalDataSet, direction, variable)
       }
     }
+
+    if (starsNbr > 1) {
+      logger.info(s"- Here are the (Star, ParSet) pairs:")
+      logger.info("Join Pairs: " + joinPairs)
+
+      if (starsNbr > 1) logger.info(s"- Here are join pairs: $joins") else logger.info("No join detected.")
+      logger.info(s"- Number of predicates per star: $starNbrFilters ")
+
+      val starWeights = pl.sortStarsByWeight(starDataTypesMap, starNbrFilters, configFile)
+      logger.info(s"- Stars weighted (performance + nbr of filters): $starWeights \n")
+
+      val sortedScoredJoins = pl.reorder(joins, starDataTypesMap, starNbrFilters, starWeights, configFile)
+      logger.info(s"- Sorted scored joins: $sortedScoredJoins")
+      val startingJoin = sortedScoredJoins.head
+
+      // Convert starting join to: (leftStar, (rightStar, joinVar)) so we can remove it from $joins
+      var firstJoin: (String, (String, String)) = null
+      for (j <- joins.entries) {
+        if (j.getKey == startingJoin._1._1 && j.getValue._1 == startingJoin._1._2)
+          firstJoin = startingJoin._1._1 -> (startingJoin._1._2, j.getValue._2)
+      }
+      logger.info(s"- Starting join: $firstJoin \n")
+
+      // Final global join
+      finalDataSet = executor.join(joins, prefixes, star_df, edgeIdMap, columnNames, variable)
+
+      //finalDataSet.asInstanceOf[DataFrame].printSchema()
+
+      // finalDataSet = executor.joinReordered(joins, prefixes, star_df, firstJoin, starWeights)
+    } else {
+      logger.info(s" Single star query")
+      finalDataSet = star_df.head._2
+    }
+
 
     logger.info("|__ Has distinct? " + distinct)
     val (finalDataSet1,edgeIdMap1) = executor.project(finalDataSet, columnNames,edgeIdMap, orderby)
@@ -364,13 +370,30 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     stopwatch stop()
     val Query_Execution = stopwatch.getTime
 
+    val mb = 1024*1024
     val memo = sc.getExecutorMemoryStatus.values.toList
     val max_memo = memo(0)._1
     val remain_memo = memo(0)._2
-    val memo_usage =(max_memo-remain_memo)
+    val memo_usage =(max_memo-remain_memo)/mb
     val cpu = sc.defaultParallelism
 
-    (nb_resuts,Query_Analysis,Relevant_Source_Detection,Query_Execution,memo_usage,cpu)
+    val query_info =  Array(nb_resuts.toString,
+      starsNbr.toString,
+      joinPairs.size.toString,
+      columnNames.size.toString,
+      nb_filter.toString,
+      nb_orderby.toString,
+      limit.toString
+    )
 
+    val exec_time_info = Array(
+      Query_Analysis.toString,
+      Relevant_Source_Detection.toString,
+      Query_Execution.toString,
+      memo_usage.toString,
+      cpu.toString
+    )
+
+    (query_info,exec_time_info)
   }
 }

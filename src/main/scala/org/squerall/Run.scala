@@ -14,13 +14,13 @@ class Run[A] (executor: QueryExecutor[A]) {
 
   private var finalDataSet: A = _
 
-  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String)
-  : (Double,Long,Long,Long,Long,Int) = {
+  def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String): (Array[String],Array[String]) = {
     val logger = Logger("Squerall")
 
     var num = 0
     var edgeIdMap: Map[String,Int] = Map.empty
     var sc: SparkContext = null
+    var nb_filter = 0
 
     var stopwatch: StopWatch = new StopWatch
     stopwatch start()
@@ -31,7 +31,7 @@ class Run[A] (executor: QueryExecutor[A]) {
     val queryString = scala.io.Source.fromFile(queryFile)
     var query = try queryString.mkString finally queryString.close()
 
-    println(s"Going to execute the query: \n$query")
+   // println(s"Going to execute the query: \n$query")
 
     // 'SPARQL' Transformations
     var transformExist = false
@@ -215,6 +215,8 @@ class Run[A] (executor: QueryExecutor[A]) {
 
         starNbrFilters += star -> numberOfFiltersOfThisStar
 
+        nb_filter = nb_filter +  numberOfFiltersOfThisStar
+
         logger.info("join...with ParSet schema: " + ds)
         //ds.printSchema() // SEE WHAT TO DO HERE TO SHOW BACK THE SCHEMA - MOVE IN SPARKEXECUTOR
       } else if (!joinedToFlag.contains(star) && !joinedFromFlag.contains(star)) {
@@ -316,8 +318,10 @@ class Run[A] (executor: QueryExecutor[A]) {
 
     logger.info(s"--> SELECTED column names: $columnNames") // TODO: check the order of PROJECT and ORDER-BY
 
+    var nb_orderby = 0
     if (orderBys != null) {
       logger.info(s"orderBys: $orderBys")
+      nb_orderby = orderBys.size
 
       var orderByList: Set[(String, String)] = Set()
       for (o <- orderBys) {
@@ -334,13 +338,7 @@ class Run[A] (executor: QueryExecutor[A]) {
       for (o <- orderByList) {
         val variable = o._1
         val direction = o._2
-
-        val stopwatch: StopWatch = new StopWatch
-        stopwatch start()
         finalDataSet = executor.orderBy(finalDataSet, direction, variable, sc)
-        stopwatch stop()
-        val timeTaken = stopwatch.getTime
-        println(s"++++++ orderby time : $timeTaken")
       }
     }
 
@@ -349,35 +347,48 @@ class Run[A] (executor: QueryExecutor[A]) {
     finalDataSet = executor.project(finalDataSet, columnNames, distinct)
 
     if (limit > 0) {
-      val stopwatch: StopWatch = new StopWatch
-      stopwatch start()
       finalDataSet = executor.limit(finalDataSet, limit)
-      stopwatch stop()
-      val timeTaken = stopwatch.getTime
-      println(s"++++++ orderby time : $timeTaken")
-
     }
 
     //val stopwatch: StopWatch = new StopWatch
     //stopwatch start()
 
-    val startTimeMillis = System.currentTimeMillis()
+ //   val startTimeMillis = System.currentTimeMillis()
 
     val nb_resuts = executor.run(finalDataSet)
 
-    val endTimeMillis = System.currentTimeMillis()
-    val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
-    println("Time taken solely by the actual query execution" + durationSeconds)
+ //   val endTimeMillis = System.currentTimeMillis()
+  //  val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
+   // println("Time taken solely by the actual query execution" + durationSeconds)
 
     stopwatch stop()
     val Query_Execution = stopwatch.getTime
 
+    val mb = 1024*1024
     val memo = sc.getExecutorMemoryStatus.values.toList
     val max_memo = memo(0)._1
     val remain_memo = memo(0)._2
-    val memo_usage =(max_memo-remain_memo)
+    val memo_usage =(max_memo-remain_memo)/mb
     val cpu = sc.defaultParallelism
-    (nb_resuts,Query_Analysis,Relevant_Source_Detection,Query_Execution,memo_usage,cpu)
 
+    val query_info =  Array(
+      nb_resuts.toString,
+      starsNbr.toString,
+      joinPairs.size.toString,
+      columnNames.size.toString,
+      nb_filter.toString,
+      nb_orderby.toString,
+      limit.toString
+    )
+
+    val exec_time_info = Array(
+      Query_Analysis.toString,
+      Relevant_Source_Detection.toString,
+      Query_Execution.toString,
+      memo_usage.toString,
+      cpu.toString
+    )
+
+    (query_info,exec_time_info)
   }
 }

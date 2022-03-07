@@ -34,7 +34,9 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   def join(joins: ArrayListMultimap[String, (String, String)],
            prefixes: Map[String, String],
            star_df: Map[String,T],
-           edgeIdMap: Map[String,Array[String]]): T
+           edgeIdMap: Map[String,Array[String]],
+           columnNames: Seq[String],
+           variable: String): T
 
   /* Generates a new ParSet projecting out one or more attributes */
   def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], orderby: Boolean):  (T, Map[String,Array[String]])

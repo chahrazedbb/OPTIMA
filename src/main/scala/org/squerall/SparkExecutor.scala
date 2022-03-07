@@ -93,12 +93,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             var df : DataFrame = null
             sourceType match {
                 case "csv" =>
-                    val stopwatch: StopWatch = new StopWatch
-                    stopwatch start()
                     df = spark.read.options(options).csv(sourcePath)
-                    stopwatch stop()
-                    val timeTaken = stopwatch.getTime
-                    println(s"++++++ loading time : $timeTaken")
+                //    println(s"++++++ loading time : $timeTaken")
 
                 case "parquet" => df = spark.read.options(options).parquet(sourcePath)
                 case "cassandra" =>
@@ -168,8 +164,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
         logger.info("- filters: " + filters + " for star " + star)
 
-        val stopwatch: StopWatch = new StopWatch
-        stopwatch start()
         var whereString = ""
 
         var nbrOfFiltersOfThisStar = 0
@@ -210,10 +204,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                 }
             }
         }
-
-        stopwatch stop()
-        val timeTaken = stopwatch.getTime
-        println(s"++++++ filter time : $timeTaken")
 
         logger.info(s"Number of filters of this star is: $nbrOfFiltersOfThisStar")
 
@@ -280,8 +270,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
              edgeIdMap: Map[String,Int],
              sc: Any): DataFrame = {
 
-        val stopwatch: StopWatch = new StopWatch
-        stopwatch start()
         import scala.collection.JavaConversions._
         import scala.collection.mutable.ListBuffer
 
@@ -311,10 +299,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             val df2 = star_df(op2)
 
             if (firstTime) { // First time look for joins in the join hashmap
-                println("this is join 1")
-                val stopwatch: StopWatch = new StopWatch
-                stopwatch start()
-
+              //  println("this is join 1")
                 logger.info("...that's the FIRST JOIN")
                 seenDF.add((op1, jVal))
                 seenDF.add((op2, "ID"))
@@ -324,65 +309,43 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                 try {
                     jDF = df1.join(df2, df1.col(omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns).equalTo(df2(omitQuestionMark(op2) + "_ID")))
                     logger.info("...done")
-                    println("number of results " + jDF.count())
+                //    println("number of results " + jDF.count())
 
                 } catch {
                     case ae: NullPointerException => val logger = println("ERROR: No relevant source detected.")
                         System.exit(1)
                 }
 
-                stopwatch stop()
-
-                val timeTaken = stopwatch.getTime
-
-                println("time aken by join 1 = " + timeTaken)
+              //  println("time aken by join 1 = " + timeTaken)
             } else {
                 val dfs_only = seenDF.map(_._1)
                 logger.info(s"EVALUATING NEXT JOIN ...checking prev. done joins: $dfs_only")
                 if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-                    println("this is join 2")
+                 //   println("this is join 2")
                     logger.info("...we can join (this direction >>)")
-                    val stopwatch: StopWatch = new StopWatch
-                    stopwatch start()
                     val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                     val rightJVar = omitQuestionMark(op2) + "_ID"
                     jDF = jDF.join(df2, jDF.col(leftJVar).equalTo(df2.col(rightJVar)))
-                    println("number of results join 2" + jDF.count())
+              //      println("number of results join 2" + jDF.count())
                     seenDF.add((op2,"ID"))
-                    stopwatch stop()
-
-                    val timeTaken = stopwatch.getTime
-
-                    println("time aken by join 2 = " + timeTaken)
+                  //  println("time aken by join 2 = " + timeTaken)
 
                 } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
                     logger.info("...we can join (this direction >>)")
-                    println("this is join 3")
-                    val stopwatch: StopWatch = new StopWatch
-                    stopwatch start()
+                 //   println("this is join 3")
                     val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                     val rightJVar = omitQuestionMark(op2) + "_ID"
                     jDF = df1.join(jDF, df1.col(leftJVar).equalTo(jDF.col(rightJVar)))
-                    println("number of results join 3" + jDF.count())
+                 //   println("number of results join 3" + jDF.count())
                     seenDF.add((op1,jVal))
-                    stopwatch stop()
-
-                    val timeTaken = stopwatch.getTime
-
-                    println("time aken by join 3 = " + timeTaken)
-
                 } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-                    println("hi there 88")
                     logger.info("...no join possible -> GOING TO THE QUEUE")
                     pendingJoins.enqueue((op1, (op2, jVal)))
-
                 }
             }
         }
 
         while (pendingJoins.nonEmpty) {
-            println("hi there 00")
-
             logger.info("ENTERED QUEUED AREA: " + pendingJoins)
             val dfs_only = seenDF.map(_._1)
 
@@ -401,7 +364,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
             val df2 = star_df(op2)
 
             if (dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-                println("this is joining 4")
                 val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                 val rightJVar = omitQuestionMark(op2) + "_ID"
                 jDF = jDF.join(df2, jDF.col(leftJVar).equalTo(df2.col(rightJVar))) // deep-left
@@ -409,7 +371,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
                 seenDF.add((op2,"ID"))
             } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
-                println("this is joining 5")
                 val leftJVar = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
                 val rightJVar = omitQuestionMark(op2) + "_ID"
                 jDF = jDF.join(df1, df1.col(leftJVar).equalTo(jDF.col(rightJVar))) // deep-left
@@ -417,17 +378,11 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
 
                 seenDF.add((op1,jVal))
             } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
-                println("hi there 33")
                 pendingJoins.enqueue((op1, (op2, jVal)))
             }
 
             pendingJoins = pendingJoins.tail
         }
-
-        stopwatch stop()
-        val timeTaken = stopwatch.getTime
-        println(s"++++++ joining time : $timeTaken")
-
         jDF
     }
 
@@ -614,9 +569,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
     def limit(jDF: Any, limitValue: Int) : DataFrame = jDF.asInstanceOf[DataFrame].limit(limitValue)
 
     def show(jDF: Any): Double = {
-        val stopwatch: StopWatch = new StopWatch
-        stopwatch start()
-
         val columns = ArrayBuffer[String]()
         //jDF.asInstanceOf[DataFrame].show
         val df = jDF.asInstanceOf[DataFrame].limit(20)
@@ -629,11 +581,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
         df.foreach(x => println(x))
 
       //  println(s"Number of results: ${jDF.asInstanceOf[DataFrame].count()}")
-
-        stopwatch stop()
-        val timeTaken = stopwatch.getTime
-        println(s"Time taken by show method: $timeTaken")
-
         jDF.asInstanceOf[DataFrame].count()
     }
 
