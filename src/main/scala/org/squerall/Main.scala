@@ -26,7 +26,7 @@ object Main extends App {
   val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/old/config"//args(2)
   val executorID = "local" //jdbc:presto://localhost:8080"//args(3)//"local"
   val reorderJoin = "n"//args(4)
-  val queryEngine = "g"//args(5)
+  val queryEngine = "s"//args(5)
   //var timeTable = new Array[Double](20)
   val mb = 1024*1024
   var Query_Analysis, Relevant_Source_Detection,Query_Execution,memo_usage,cpu, nb_resuts , stars, join, project, filter, orderby, limit = ""

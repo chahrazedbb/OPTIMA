@@ -21,6 +21,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     var edgeIdMap2: Map[String,Array[String]] = Map.empty
     var sc: SparkContext = null
     var nb_filter = 0
+    var finalHeader:String = ""
 
     // 1. Read SPARQL query
     var stopwatch: StopWatch = new StopWatch
@@ -332,8 +333,9 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       logger.info(s"- Starting join: $firstJoin \n")
 
       // Final global join
-      finalDataSet = executor.join(joins, prefixes, star_df, edgeIdMap, columnNames, variable)
-
+      val (a,b) = executor.join(joins, prefixes, star_df, edgeIdMap, columnNames)
+      finalDataSet = a
+      finalHeader = b
       //finalDataSet.asInstanceOf[DataFrame].printSchema()
 
       // finalDataSet = executor.joinReordered(joins, prefixes, star_df, firstJoin, starWeights)
@@ -356,7 +358,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     val startTimeMillis = System.currentTimeMillis()
 
-    val nb_resuts  = executor.run(finalDataSet, variable ,edgeIdMap2, limit, orderby, distinct)
+    val nb_resuts  = executor.run(finalDataSet, variable ,edgeIdMap2, limit, orderby, distinct, finalHeader)
 
  //   val endTimeMillis = System.currentTimeMillis()
  //   val durationSeconds = (endTimeMillis - startTimeMillis) // 1000

@@ -225,10 +225,9 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
            prefixes: Map[String, String],
            star_df: Map[String, Graph[Array[String],String]],
            edgeIdMap: Map[String,Array[String]],
-           columnNames: Seq[String],
-           variable: String)
+           columnNames: Seq[String])
 
-  :Graph[Array[String],String] = {
+  :(Graph[Array[String],String],String) = {
     import scala.collection.JavaConversions._
     import scala.collection.mutable.ListBuffer
 
@@ -236,6 +235,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     val seenDF : ListBuffer[(String,String)] = ListBuffer()
     var firstTime = true
     var jGrah :Graph[Array[String],String] = null
+    var finalHeader : String = ""
 
     val it = joins.entries.iterator
     while ({it.hasNext}) {
@@ -261,20 +261,20 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
       println("this is columns " + columnNames)
       //getting the added number to the edges ids
-      if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
-        id2 = edgeIdMap(omitQuestionMark(op2))(0)
-        header2 = edgeIdMap(omitQuestionMark(op2))(1)
-        println("this is header2 " + header2)
-        project2 = getColumnsIndex(header2,columnNames.toArray,null)
-        println("this is projet2 " + project2.mkString(","))
-      }
-
       if (edgeIdMap.keySet.contains(omitQuestionMark(op1)) ){
         id1 = edgeIdMap(omitQuestionMark(op1))(0)
         header1 = edgeIdMap(omitQuestionMark(op1))(1)
         println("this is header1 " + header1)
         project1 = getColumnsIndex(header1,columnNames.toArray,null)
         println("this is projet1 " + project1.mkString(","))
+      }
+
+      if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
+        id2 = edgeIdMap(omitQuestionMark(op2))(0)
+        header2 = edgeIdMap(omitQuestionMark(op2))(1)
+        println("this is header2 " + header2)
+        project2 = getColumnsIndex(header2,columnNames.toArray,null)
+        println("this is projet2 " + project2.mkString(","))
       }
 
       if (firstTime) {
@@ -305,6 +305,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         jGrah = Graph(newVertex,newEdge)
         println("this is first time")
         jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
+        finalHeader = getVertexAttributs(header1,columnNames.toArray)+ ","   + getVertexAttributs(header2,columnNames.toArray)
+        println("finalHeader finalHeader finalHeader " + finalHeader)
       } else {
         val dfs_only = seenDF.map(_._1)
 
@@ -330,6 +332,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           println("this is second time")
           jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
           seenDF.add((op2,"ID"))
+          finalHeader =  finalHeader + "," +  getVertexAttributs(header2,columnNames.toArray)
+          println("finalHeader finalHeader finalHeader " + finalHeader)
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
           //foreign key
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
@@ -350,6 +354,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           println("this is third time")
           jGrah.triplets.foreach(t=>print(t.srcAttr.mkString(",")))
           seenDF.add((op1,jVal))
+          finalHeader =  finalHeader + "," +  getVertexAttributs(header1,columnNames.toArray)
+          println("finalHeader finalHeader finalHeader " + finalHeader)
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
           pendingJoins.enqueue((op1, (op2, jVal)))
         }
@@ -423,7 +429,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       }
       pendingJoins = pendingJoins.tail
     }
-    jGrah
+    (jGrah,finalHeader)
   }
 
 def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], orderby: Boolean):
@@ -447,14 +453,14 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
     joinPS.asInstanceOf[Graph[Array[String],String]]
   }
 
-  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct: Boolean): Double = {
+  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct: Boolean, finalHeader : String): Double = {
     val graph = PS.asInstanceOf[Graph[Array[String], String]]
 
     var triples = graph.triplets
     println("this is triplet")
     triples.foreach(t=>println(t.srcAttr.mkString(",") + " ,, "+t.dstAttr.mkString(",")))
       if (orderby) {
-        val dex = getSingleColumnIndex(edgeIdMap, variable)
+        val dex = getSingleColumnIndex(finalHeader, variable)
         println("this is dex " + dex)
         triples = triples.sortBy(_.srcAttr(dex))
       }
@@ -470,8 +476,8 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
       (results.length)
   }
 
-  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean): Double = {
-    this.show(jDF,  variable, edgeIdMap, limit, orderby, distinct)
+  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean, finalHeader :String): Double = {
+    this.show(jDF,  variable, edgeIdMap, limit, orderby, distinct, finalHeader)
   }
 
 
@@ -496,18 +502,31 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
     finalHeaderIndex
   }
   //        edgeIdMap2 += (index._1 -> Array(i,index._2(1)))
-  def getSingleColumnIndex(edgeIdMap : Map[String, Array[String]] , variable : String) : Int =
+  def getSingleColumnIndex(finalHeader : String , variable : String) : Int =
   {
     import scala.util.control.Breaks._
     //var columnIndexList: Map[String,String]= Map.empty
-    var num: Int = 0
-    edgeIdMap.values.foreach{
+    var num = -1
+    finalHeader.split(",").foreach{
       headers =>
-        if(headers(1).contains(variable)){
-          println("this is headers " + headers(0).toString + " , " + headers(1).toString  + " this is variable " + variable)
-          num = headers(0).toInt
+        if(headers.contains(variable)){
+          num = finalHeader.indexOf(variable)
         }
     }
     num
+  }
+
+  def getVertexAttributs(header: String, columns: Array[String]) : String = {
+    var finalHeader: String= ""
+    val headerArray = header.toLowerCase().split(",")
+    columns.foreach { col =>
+      println("this is col " + col)
+      println("this is headerArray " + headerArray.mkString(","))
+      println((headerArray.contains(col.toLowerCase())))
+      if (headerArray.contains(col.toLowerCase())) {
+        finalHeader = finalHeader + "," + col
+      }
+    }
+    finalHeader.substring(1)
   }
 }
