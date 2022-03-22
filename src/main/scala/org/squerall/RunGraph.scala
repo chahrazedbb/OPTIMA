@@ -342,13 +342,11 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     } else {
       logger.info(s" Single star query")
       finalDataSet = star_df.head._2
+      logger.info("|__ Has distinct? " + distinct)
+      val (finalDataSet1,finalHeader1) = executor.project(finalDataSet, columnNames, edgeIdMap)
+      finalDataSet = finalDataSet1
+      finalHeader = finalHeader1
     }
-
-
-    logger.info("|__ Has distinct? " + distinct)
-    val (finalDataSet1,edgeIdMap1) = executor.project(finalDataSet, columnNames,edgeIdMap, orderby)
-    finalDataSet = finalDataSet1
-    edgeIdMap2 = edgeIdMap1
 
     //if (limit > 0)
     //  finalDataSet = executor.limit(finalDataSet, limit)
@@ -358,7 +356,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     val startTimeMillis = System.currentTimeMillis()
 
-    val nb_resuts  = executor.run(finalDataSet, variable ,edgeIdMap2, limit, orderby, distinct, finalHeader)
+    val nb_resuts  = executor.run(finalDataSet, variable ,limit, orderby, distinct, finalHeader)
 
  //   val endTimeMillis = System.currentTimeMillis()
  //   val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
@@ -395,7 +393,6 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       memo_usage.toString,
       cpu.toString
     )
-
     (query_info,exec_time_info)
   }
 }

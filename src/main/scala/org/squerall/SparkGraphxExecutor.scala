@@ -31,7 +31,16 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
             rightJoinTransformations: Array[String],
             joinPairs: Map[(String, String), String], edgeId: Int):
   (Graph[Array[String],String],Integer,String,Map[String,Array[String]],SparkContext)  = {
-    var spark = SparkSession.builder.master(sparkURI).appName("Squerall").getOrCreate
+    import org.neo4j.spark._
+    //starting new spark context
+    val config = new SparkConf()
+    config.set(Neo4jConfig.prefix + "url", "bolt://localhost:11007")
+    config.set(Neo4jConfig.prefix + "user", "neo4j")
+    config.set(Neo4jConfig.prefix + "password", "test")
+    config.set("spark.cassandra.connection.host", "127.0.0.1")
+
+    val spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(config).getOrCreate
+
     var sc = spark.sparkContext
     var dataSource_count = 0
     var parSetId = ""
@@ -39,6 +48,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
 
     var finalHeaderIndex : Array[Int] = Array.empty
     var selectedHeader: Array[String]=Array.empty
+    var selectedHeader2: Array[String]=Array.empty
     var finalHeader: Array[String] = Array.empty
     var finalHeader2: Array[String] = Array.empty
     var edgeIdMap : Map[String, Array[String]] = Map.empty
@@ -80,6 +90,8 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           }
       }
       columns.split(",").foreach (col => selectedHeader = selectedHeader :+ col.split("AS")(0).filterNot(toRemove).trim.toLowerCase)//toLowerCase for mongodb since it is case sensitive
+      columns.split(",").foreach (col => selectedHeader2 = selectedHeader2 :+ col.split("AS")(0).filterNot(toRemove).trim)//toLowerCase for mongodb since it is case sensitive
+
       //vertex
       var vertex: RDD[(VertexId, Array[String])] = null
       var header = ""
@@ -90,17 +102,13 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //getting the header
           header = data.first()
           finalHeaderIndex = getColumnsIndex(header,selectedHeader,toRemove)
-          println("this is finalHeaderIndex " + finalHeaderIndex.mkString(","))
+     //     println("this is finalHeaderIndex " + finalHeaderIndex.mkString(","))
           //getting data
           val all_col_vertex =  data .filter(line => line != header).map(line =>  line.split(",")).map( parts => ((edgeId+"00"+parts.head).toLong, parts))
           vertex = all_col_vertex.map(v=>(v._1,finalHeaderIndex.map({i=>v._2(i)})))
         case "cassandra" =>
           import com.datastax.spark.connector._
           //start new spark contet
-          val conf = new SparkConf(true).set("spark.cassandra.connection.host", "127.0.0.1")
-          sc.stop()
-          spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(conf).getOrCreate
-          sc = spark.sparkContext
           val values = options.values.toList
           val rdd = sc.cassandraTable(keyspace = values(0), table = values(1))
           vertex = rdd.map(r=>((edgeId+"00"+r.getLong("id").toString).toLong,selectedHeader.map({i=>r.getString(i)})))
@@ -110,23 +118,14 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           else makeMongoURI(values(0), values(1), values(2), null)
           val mongoOptions: ReadConfig = ReadConfig(Map("uri" -> mongoConf, "partitioner" -> "MongoPaginateBySizePartitioner"))
           val rdd = MongoSpark.load(sc,mongoOptions)
-          vertex =  rdd.filter(line => line != header).map(d=>((edgeId+"00"+d.get("id").toString).toLong,selectedHeader.map({i=>d.get(i).toString})))
+          vertex =  rdd.map(d=>((edgeId+"00"+d.get("id").toString).toLong,selectedHeader2.map({i=>d.get(i).toString})))
         case "jdbc" =>
           val jdbcRDD = LoadSimpleJdbc.getResults(sc,selectedHeader,options)
           vertex = jdbcRDD.map(j=>((edgeId+"00"+j._1.toString).toLong,j._2))
         case "neo4j" =>
-          import org.neo4j.spark._
-          //starting new spark context
-          sc.stop()
-          val config = new SparkConf()
-          config.set(Neo4jConfig.prefix + "url", "bolt://localhost")
-          config.set(Neo4jConfig.prefix + "user", "neo4j")
-          config.set(Neo4jConfig.prefix + "password", "test")
-          spark = SparkSession.builder.master(sparkURI).appName("Squerall").config(config).getOrCreate
-          sc = spark.sparkContext
           var selected_columns = ""
           selectedHeader.foreach(col =>
-            selected_columns = selected_columns  + " var."+ selectedHeader + ","
+            selected_columns = selected_columns  + " var."+ col + ","
           )
           if(!selected_columns.contains("nr")){
             selected_columns = " var.nr, " + selected_columns
@@ -136,7 +135,10 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           val table_name = values(1)
           val neo = Neo4j(sc)
           val rdd = neo.cypher("MATCH (var:"+table_name+") RETURN " + selected_columns).loadRowRdd
-          vertex = rdd.map(r=>((edgeId+"00"+r.getLong(0).toString).toLong,finalHeaderIndex.map({i=>r.get(i).toString})))
+          println("selected_columns " + selected_columns)
+          val id_index = selected_columns.trim.split(",").indexOf(" var.nr")
+          rdd.take(1).foreach(v=>println("** " + v.get(id_index).toString))
+          vertex = rdd.map(r=>((edgeId+"00"+r.get(id_index).toString).toLong,r.mkString(",").split(",")))
       }
       if(finalVer == null) {
         finalVer = vertex
@@ -259,22 +261,22 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
       var project2 : Array[Int] = Array.empty
       it.remove()
 
-      println("this is columns " + columnNames)
+    //  println("this is columns " + columnNames)
       //getting the added number to the edges ids
       if (edgeIdMap.keySet.contains(omitQuestionMark(op1)) ){
         id1 = edgeIdMap(omitQuestionMark(op1))(0)
         header1 = edgeIdMap(omitQuestionMark(op1))(1)
-        println("this is header1 " + header1)
+   //     println("this is header1 " + header1)
         project1 = getColumnsIndex(header1,columnNames.toArray,null)
-        println("this is projet1 " + project1.mkString(","))
+ //       println("this is projet1 " + project1.mkString(","))
       }
 
       if (edgeIdMap.keySet.contains(omitQuestionMark(op2)) ){
         id2 = edgeIdMap(omitQuestionMark(op2))(0)
         header2 = edgeIdMap(omitQuestionMark(op2))(1)
-        println("this is header2 " + header2)
+    //    println("this is header2 " + header2)
         project2 = getColumnsIndex(header2,columnNames.toArray,null)
-        println("this is projet2 " + project2.mkString(","))
+   //     println("this is projet2 " + project2.mkString(","))
       }
 
       if (firstTime) {
@@ -289,24 +291,24 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         val edges: RDD[Edge[String]] =vertex1.map{ (v) => Edge(v._1,(id2+"00"+v._2(colIndex)).toLong, fk) }
         //projection
         val vertex1_1 = vertex1.map(v=>(v._1, project1.map({i=>v._2(i)})))
-        vertex1_1.foreach(v=>println(v._1 + " , " + v._2.mkString(",")))
+     //   vertex1_1.foreach(v=>println(v._1 + " , " + v._2.mkString(",")))
         val vertex2_2 = vertex2.map(v=>(v._1, project2.map({i=>v._2(i)})))
-        vertex2_2.foreach(v=>println(v._1 +" , " + v._2.mkString(",")))
-        edges.foreach(e=>println(e.srcId + "," + e.dstId))
+     //   vertex2_2.foreach(v=>println(v._1 +" , " + v._2.mkString(",")))
+    //    edges.foreach(e=>println(e.srcId + "," + e.dstId))
         //creating the graph
         jGrah = Graph(vertex1_1.union(vertex2_2).filter((v)=>v._2!=null)
           , edges)
         jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
         //getting triplet
-        println("this is first time")
-        jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
+      //  println("this is first time")
+      //  jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
         val newVertex = jGrah.triplets.map(t=>(t.srcId,(t.srcAttr.mkString(",") + "," +t.dstAttr.mkString(",")).split(",")))
         val newEdge: RDD[Edge[String]] = newVertex.map{(v) => Edge(v._1,v._1, "id")}
         jGrah = Graph(newVertex,newEdge)
-        println("this is first time")
-        jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
+     //   println("this is first time")
+     //   jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
         finalHeader = getVertexAttributs(header1,columnNames.toArray)+ ","   + getVertexAttributs(header2,columnNames.toArray)
-        println("finalHeader finalHeader finalHeader " + finalHeader)
+    //    println("finalHeader finalHeader finalHeader " + finalHeader)
       } else {
         val dfs_only = seenDF.map(_._1)
 
@@ -324,16 +326,16 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
          //   , jGrah.edges.union(edges))
           jGrah = Graph(jGrah.vertices.union(vertex2_2).filter((v)=>v._2!=null)
             , edges)
-        //  jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+          jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
         //getting triplet
           val newVertex = jGrah.triplets.map(t=>(t.srcId,(t.srcAttr.mkString(",") + "," +t.dstAttr.mkString(",")).split(",")))
           val newEdge: RDD[Edge[String]] = newVertex.map{(v) => Edge(v._1,v._1, "id")}
           jGrah = Graph(newVertex,newEdge)
-          println("this is second time")
-          jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
+      //    println("this is second time")
+      //    jGrah.triplets.foreach(t=>println(t.srcAttr.mkString(",")))
           seenDF.add((op2,"ID"))
           finalHeader =  finalHeader + "," +  getVertexAttributs(header2,columnNames.toArray)
-          println("finalHeader finalHeader finalHeader " + finalHeader)
+      //    println("finalHeader finalHeader finalHeader " + finalHeader)
         } else if (!dfs_only.contains(op1) && dfs_only.contains(op2)) {
           //foreign key
           val fk = omitQuestionMark(op1) + "_" + omitNamespace(jVal) + "_" + ns
@@ -346,16 +348,16 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
           //getting temp graph
           jGrah = Graph(jGrah.vertices.union(vertex1_1).filter((v)=>v._2!=null)
             , edges)
-         // jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+          jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
          //getting triplet
          val newVertex = jGrah.triplets.map(t=>(t.srcId,(t.srcAttr.mkString(",") + "," +t.dstAttr.mkString(",")).split(",")))
           val newEdge: RDD[Edge[String]] = newVertex.map{(v) => Edge(v._1,v._1, "id")}
           jGrah = Graph(newVertex,newEdge)
-          println("this is third time")
+        //  println("this is third time")
           jGrah.triplets.foreach(t=>print(t.srcAttr.mkString(",")))
           seenDF.add((op1,jVal))
           finalHeader =  finalHeader + "," +  getVertexAttributs(header1,columnNames.toArray)
-          println("finalHeader finalHeader finalHeader " + finalHeader)
+      //    println("finalHeader finalHeader finalHeader " + finalHeader)
         } else if (!dfs_only.contains(op1) && !dfs_only.contains(op2)) {
           pendingJoins.enqueue((op1, (op2, jVal)))
         }
@@ -404,7 +406,7 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
         //creating the graph
         jGrah = Graph(jGrah.vertices.union(vertex2).filter((v)=>v._2!=null)
           , jGrah.edges.union(edges))
-      //  jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
+        jGrah = jGrah.subgraph(vpred = (vid,vd)=>vd!=null)
       //getting triplet
       val newVertex = jGrah.triplets.map(t=>(t.srcId,(t.srcAttr.mkString(",") + "," +t.dstAttr.mkString(",")).split(",")))
         val newEdge: RDD[Edge[String]] = newVertex.map{(v) => Edge(v._1,v._1, "id")}
@@ -432,11 +434,25 @@ class SparkGraphxExecutor (sparkURI: String, mappingsFile: String) extends Query
     (jGrah,finalHeader)
   }
 
-def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], orderby: Boolean):
-(Graph[Array[String], String], Map[String,Array[String]])= {
-  val jGP = jDF.asInstanceOf[Graph[Array[String],String]]
-  var edgeIdMap2: Map[String,Array[String]] = Map.empty
-  (jGP,edgeIdMap2)
+def project(jDF: Any, columnNames: Seq[String],  edgeIdMap: Map[String,Array[String]]):
+(Graph[Array[String], String],String)= {
+  var jGP = jDF.asInstanceOf[Graph[Array[String], String]]
+  var finalHeader: String = ""
+  var finalHeaderIndex: Array[Int] = Array.empty
+  var vertex : RDD[(VertexId,Array[String])] = null
+  val edges = jGP.edges
+  edgeIdMap.foreach{
+    key =>
+    //  println("this is key " + key._1 + ", " + key._2.mkString )
+      val header = key._2(1)
+      finalHeader = getVertexAttributs(header,columnNames.toArray)
+   //   println("final header " + finalHeader)
+      finalHeaderIndex = getColumnsIndex(header,columnNames.toArray,null)
+   //   println("final header inde" + finalHeaderIndex.mkString(","))
+  }
+  vertex = jGP.vertices.map(v=>(v._1, finalHeaderIndex.map({i=>v._2(i)})))
+  jGP = Graph(vertex, edges)
+  (jGP,finalHeader)
 }
 
   def orderBy(jDF: Any, direction: String, variable: String):
@@ -453,15 +469,16 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
     joinPS.asInstanceOf[Graph[Array[String],String]]
   }
 
-  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct: Boolean, finalHeader : String): Double = {
+  def show(PS: Any, variable: String, limit: Int, orderby: Boolean, distinct: Boolean, finalHeader : String): Double = {
     val graph = PS.asInstanceOf[Graph[Array[String], String]]
 
     var triples = graph.triplets
-    println("this is triplet")
-    triples.foreach(t=>println(t.srcAttr.mkString(",") + " ,, "+t.dstAttr.mkString(",")))
+    //println("this is triplet")
+  //  triples.foreach(t=>println(t.srcAttr.mkString(",") + " ,, "+t.dstAttr.mkString(",")))
       if (orderby) {
         val dex = getSingleColumnIndex(finalHeader, variable)
-        println("this is dex " + dex)
+       // println("this is finalHeader " + finalHeader)
+       // println("this is dex " + dex)
         triples = triples.sortBy(_.srcAttr(dex))
       }
       var results = triples.map(triplet => "[" + triplet.srcAttr.mkString(",") + "]").collect()
@@ -471,13 +488,13 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
       if (limit > 0) {
         results = results.take(limit)
       }
-      results.take(5).foreach(println(_))
+      results.foreach(println(_))
       //  println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
       (results.length)
   }
 
-  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean, finalHeader :String): Double = {
-    this.show(jDF,  variable, edgeIdMap, limit, orderby, distinct, finalHeader)
+  def run(jDF: Any, variable: String, limit: Int, orderby: Boolean, distinct : Boolean, finalHeader :String): Double = {
+    this.show(jDF,  variable, limit, orderby, distinct, finalHeader)
   }
 
 
@@ -491,9 +508,9 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
     var finalHeaderIndex:Array[Int]= Array.empty
     val headerArray = header.toLowerCase().split(",")
     columns.foreach { col =>
-      println("this is col " + col)
-      println("this is headerArray " + headerArray.mkString(","))
-      println((headerArray.contains(col.toLowerCase())))
+     // println("this is col " + col)
+    //  println("this is headerArray " + headerArray.mkString(","))
+    //  println((headerArray.contains(col.toLowerCase())))
       if (headerArray.contains(col.toLowerCase())) {
         val i = headerArray.indexOf(col.toLowerCase())
         finalHeaderIndex = finalHeaderIndex :+ i
@@ -506,11 +523,15 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
   {
     import scala.util.control.Breaks._
     //var columnIndexList: Map[String,String]= Map.empty
+    var fh = finalHeader.toLowerCase.split(",")
+    //println("this is finalheder " + finalHeader)
     var num = -1
-    finalHeader.split(",").foreach{
+    fh.foreach{
       headers =>
-        if(headers.contains(variable)){
-          num = finalHeader.indexOf(variable)
+        //println("this is headers " + headers + " this is variable " + variable)
+        if(headers.equals(variable.toLowerCase)){
+          //println("this is num")
+          num = fh.indexOf(variable.toLowerCase)
         }
     }
     num
@@ -520,13 +541,17 @@ def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[Stri
     var finalHeader: String= ""
     val headerArray = header.toLowerCase().split(",")
     columns.foreach { col =>
-      println("this is col " + col)
-      println("this is headerArray " + headerArray.mkString(","))
-      println((headerArray.contains(col.toLowerCase())))
+   //   println("this is col " + col)
+   //   println("this is headerArray " + headerArray.mkString(","))
+  //    println((headerArray.contains(col.toLowerCase())))
       if (headerArray.contains(col.toLowerCase())) {
         finalHeader = finalHeader + "," + col
       }
     }
-    finalHeader.substring(1)
+    if(!finalHeader.equals("")){
+      finalHeader =  finalHeader.substring(1)
+    }
+
+    finalHeader
   }
 }

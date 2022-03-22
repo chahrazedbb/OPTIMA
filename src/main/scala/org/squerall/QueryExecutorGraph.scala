@@ -38,7 +38,7 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
            columnNames: Seq[String]): (T,String)
 
   /* Generates a new ParSet projecting out one or more attributes */
-  def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]], orderby: Boolean):  (T, Map[String,Array[String]])
+  def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]]): (T, String)
 
   /* Counts the number of tuples of a ParSet */
   def count(joinPS: T): Long
@@ -53,8 +53,8 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   def limit(joinPS: Any, limitValue: Int) : T
 
   /* Show some results */
-  def show(PS: Any, variable: String, edgeIdMap: Map[String,Array[String]],limit: Int, orderby: Boolean, distinct: Boolean, finalHeader : String) : Double
+  def show(PS: Any, variable: String, limit: Int, orderby: Boolean, distinct: Boolean, finalHeader : String) : Double
 
   /* Compute the results */
-  def run(jDF: Any, variable: String, edgeIdMap: Map[String,Array[String]], limit: Int, orderby: Boolean, distinct : Boolean, finalHeader : String) : Double
+  def run(jDF: Any, variable: String, limit: Int, orderby: Boolean, distinct : Boolean, finalHeader : String) : Double
 }

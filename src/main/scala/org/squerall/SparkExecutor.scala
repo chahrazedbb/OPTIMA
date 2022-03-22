@@ -119,7 +119,12 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     val values = options.values.toList
                     val table_name = values(1)
                     val neo = Neo4j(sc)
-                    df = neo.cypher("MATCH (var:"+table_name+") RETURN var" ).loadDataFrame
+                    df = neo.cypher("MATCH (p:person) RETURN p.nr as nr," +
+                      "p.name as name," +
+                      "p.mbox_sha1sum as mbox_sha1sum," +
+                      "p.country as country," +
+                      "p.publisher as publisher," +
+                      "p.publishDate as publishDate" ).loadDataFrame
                 case _ =>
             }
 
