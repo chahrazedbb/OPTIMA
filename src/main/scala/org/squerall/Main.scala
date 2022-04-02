@@ -22,24 +22,24 @@ import java.io.{BufferedWriter, FileWriter}
 
 object Main extends App {
 
-  val mappingsFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/old/mappings.ttl"//args(1)
-  val configFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/old/config"//args(2)
+  val mappingsFile = "src/main/resources/input_files/only_csv/mappings.ttl"//args(1)
+  val configFile = "src/main/resources/input_files/only_csv/config"//args(2)
   val executorID = "local" //jdbc:presto://localhost:8080"//args(3)//"local"
   val reorderJoin = "n"//args(4)
-  val queryEngine = "g"//args(5)
+  val queryEngine = "s"//args(5)
   //var timeTable = new Array[Double](20)
   val mb = 1024*1024
   var Query_Analysis, Relevant_Source_Detection,Query_Execution,memo_usage,cpu, nb_resuts , stars, join, project, filter, orderby, limit = ""
   var query_info, exec_time_info:Array[String] = Array.empty
   val runtime = Runtime.getRuntime
 
-  for(a <- 3 to 3) {
+  for(a <- 2305 to 2305) {
     val stopwatch: StopWatch = new StopWatch
 
     stopwatch start()
 
     //  var queryFile = "/home/chahrazed/IdeaProjects/Squeralll/evaluation/input_files/queries/Q"+a+".sparql" //args(0)
-    var queryFile = "/home/chahrazed/queries/example_queries/q"+a+".sparql" //args(0)
+    var queryFile = "/home/chahrazed/queries/experiment/query"+a+".sparql" //args(0)
 
     if (queryEngine == "s") { // Spark as  query engine
       val executor: SparkExecutor = new SparkExecutor(executorID, mappingsFile)
@@ -85,13 +85,15 @@ object Main extends App {
     cpu = exec_time_info(4)
 
     //val out = new BufferedWriter(new FileWriter("/home/chahrazed/evaluation_results.csv")) //this line will locate the file in the said directory
-   // val out = new FileWriter("/home/chahrazed/queries/example_queries/example_queries_df.csv", true)
-   // val writer = new CSVWriter(out) //this creates a csvWriter object for our file
-    //val evaluationSchema=Array("query","stars","join","project","filter","orderby","limit","results","Query_engine","Total_Execution_Time","Query_Analysis","Relevant_Source_Detection","Query_Execution","memo_usage_spark","cpu_spark","memo_usage_runtime","memo_usage_mfact","cpu_mfact") // these are the schemas/headings of our csv file
-   // val evaluationResults = Array("q"+a,stars,join,project,filter,orderby,limit,nb_resuts,queryEngine,timeTaken.toString,Query_Execution,Query_Analysis,Relevant_Source_Detection,memo_usage,cpu,memoRuntime.toString,memoMfact,cpuMfact)
-    //writer.writeNext(evaluationSchema)// this adds our data into csv file
-    //writer.writeNext(evaluationResults)
-   // out.close() //closing the file
+    val out = new FileWriter("/home/chahrazed/queries/results_df.csv", true)
+    val writer = new CSVWriter(out) //this creates a csvWriter object for our file
+    if(a == 1){
+      val evaluationSchema=Array("query","stars","join","project","filter","orderby","limit","results","Query_engine","Total_Execution_Time","Query_Analysis","Relevant_Source_Detection","Query_Execution","memo_usage_spark","cpu_spark","memo_usage_runtime","memo_usage_mfact","cpu_mfact") // these are the schemas/headings of our csv file
+      writer.writeNext(evaluationSchema)// this adds our data into csv file
+    }
+    val evaluationResults = Array("q"+a,stars,join,project,filter,orderby,limit,nb_resuts,queryEngine,timeTaken.toString,Query_Execution,Query_Analysis,Relevant_Source_Detection,memo_usage,cpu,memoRuntime.toString,memoMfact,cpuMfact)
+    writer.writeNext(evaluationResults)
+    out.close() //closing the file
     //timeTable(a) = timeTaken
   }
   //println("the program execution time is " + timeTable.mkString(", "))

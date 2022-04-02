@@ -488,7 +488,8 @@ def project(jDF: Any, columnNames: Seq[String],  edgeIdMap: Map[String,Array[Str
       if (limit > 0) {
         results = results.take(limit)
       }
-      results.foreach(println(_))
+      println("those are results")
+      results.take(20).foreach(println(_))
       //  println(s"Number of edges: ${graph.asInstanceOf[Graph[Array[String],String]].edges.count()}")
       (results.length)
   }

@@ -143,13 +143,13 @@ class QueryAnalyser(query: String) {
             if (!triple.contains(';')) { // only one predicate attached to the subject
                 println("test if the triple does not contain ; then only one predicate is attached to th subject")
                 val tripleBits = triple.split(" ")
-                println("splitting the triple where there is a space")
-                println(tripleBits(0)+" ** "+ tripleBits(1)+ " ** " + tripleBits(2))
+               // println("splitting the triple where there is a space")
+              //  println(tripleBits(0)+" ** "+ tripleBits(1)+ " ** " + tripleBits(2))
                 stars.addBinding(tripleBits(0), (tripleBits(1), tripleBits(2)))
                 // addBinding` because standard methods like `+` will overwrite the complete key-value pair instead of adding the value to the existing key
-                println("putign triples into 'stars' map where the key is the subject and the value is a set of predicate + object")
+              //  println("putign triples into 'stars' map where the key is the subject and the value is a set of predicate + object")
                 star_pred_var.put((tripleBits(0), tripleBits(1)), tripleBits(2))
-                println("putign triples into 'star_pred_var' map where the key is a sequence of subject + predicate and the value is the object")
+             //   println("putign triples into 'star_pred_var' map where the key is a sequence of subject + predicate and the value is the object")
 
             } else {
                 println("test if the triple contain ; ")
