@@ -74,7 +74,7 @@ OPTIMA can be extented by adding follwing connectors .....
 ## Publications
 - 
 
-# How to cite
+## How to cite
 We are currently preparing a scientific paper for a peer-reviewed publication. Please refer to [references.bib](references.bib) for BibTex references, which we will update continuously.
 
 ## Contact
