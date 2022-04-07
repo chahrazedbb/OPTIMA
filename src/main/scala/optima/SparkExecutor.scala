@@ -1,17 +1,15 @@
-package org.squerall
+package optima
 
-import java.util
 import com.google.common.collect.ArrayListMultimap
 import com.mongodb.spark.config.ReadConfig
 import com.typesafe.scalalogging.Logger
-import org.apache.commons.lang.time.StopWatch
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, SparkSession}
-import org.neo4j.spark.Neo4jConfig
-import org.squerall.Helpers._
+import org.apache.spark.{SparkConf, SparkContext}
+import org.squerall.NTtoDF
 
+import java.util
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
@@ -115,7 +113,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     val rdf = new NTtoDF()
                     df = rdf.options(options).read(sourcePath, sparkURI).toDF()
                 case "neo4j" =>
-                    import org.neo4j.spark._
+
                     val values = options.values.toList
                     val table_name = values(1)
                     val neo = Neo4j(sc)

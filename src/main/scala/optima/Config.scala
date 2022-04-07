@@ -1,4 +1,5 @@
-package org.squerall
+package optima
+
 import com.typesafe.config.ConfigFactory
 
 class Config {

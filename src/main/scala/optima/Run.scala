@@ -1,32 +1,28 @@
-package org.squerall
+package optima
+
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
 import org.apache.spark.SparkContext
-import org.squerall.Helpers._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
-
-class RunGraph[A] (executor: QueryExecutorGraph[A]) {
+class Run[A] (executor: QueryExecutor[A]) {
 
   private var finalDataSet: A = _
 
   def application(queryFile : String, mappingsFile: String, configFile: String, executorID: String): (Array[String],Array[String]) = {
     val logger = Logger("Squerall")
 
-    var variable = ""
     var num = 0
-    var edgeIdMap: Map[String,Array[String]] = Map.empty
-    var edgeIdMap2: Map[String,Array[String]] = Map.empty
+    var edgeIdMap: Map[String,Int] = Map.empty
     var sc: SparkContext = null
     var nb_filter = 0
-    var finalHeader:String = ""
 
-    // 1. Read SPARQL query
     var stopwatch: StopWatch = new StopWatch
     stopwatch start()
 
+    // 1. Read SPARQL query
     logger.info("Starting QUERY ANALYSIS")
 
     val queryString = scala.io.Source.fromFile(queryFile)
@@ -108,12 +104,14 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     var starDataTypesMap: Map[String, mutable.Set[String]] = Map()
     var parsetIDs : Map[String, String] = Map() // Used when subject variables are projected out
 
+    logger.info("---> GOING NOW TO COLLECT DATA")
+
     stopwatch stop()
-    val Query_Analysis = stopwatch.getTime
+    val  Query_Analysis= stopwatch.getTime
+    //   logger.info("---> GOING NOW TO COLLECT DATA")
 
     stopwatch  = new StopWatch
     stopwatch start()
-    logger.info("---> GOING NOW TO COLLECT DATA")
 
     for (s <- results) {
       num = num + 1
@@ -200,11 +198,11 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
         sc = scc
 
-        if(edgeIdMap.isEmpty){
-          edgeIdMap = mymap
-        }else{
-          edgeIdMap = edgeIdMap ++ mymap
-        }
+        /* if(edgeIdMap.isEmpty){
+           edgeIdMap = mymap
+         }else{
+           edgeIdMap = edgeIdMap ++ mymap
+         }*/
 
 
         if (parsetID != "")
@@ -244,11 +242,45 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     stopwatch stop()
     val Relevant_Source_Detection = stopwatch.getTime
 
+    logger.info("QUERY EXECUTION starting...*/")
+    logger.info(s"DataFrames: $star_df")
+
     stopwatch  = new StopWatch
     stopwatch start()
 
-    logger.info("QUERY EXECUTION starting...*/")
-    logger.info(s"DataFrames: $star_df")
+
+    if (starsNbr > 1) {
+      logger.info(s"- Here are the (Star, ParSet) pairs:")
+      logger.info("Join Pairs: " + joinPairs)
+
+      if (starsNbr > 1) logger.info(s"- Here are join pairs: $joins") else logger.info("No join detected.")
+      logger.info(s"- Number of predicates per star: $starNbrFilters ")
+
+      val starWeights = pl.sortStarsByWeight(starDataTypesMap, starNbrFilters, configFile)
+      logger.info(s"- Stars weighted (performance + nbr of filters): $starWeights \n")
+
+      val sortedScoredJoins = pl.reorder(joins, starDataTypesMap, starNbrFilters, starWeights, configFile)
+      logger.info(s"- Sorted scored joins: $sortedScoredJoins")
+      val startingJoin = sortedScoredJoins.head
+
+      // Convert starting join to: (leftStar, (rightStar, joinVar)) so we can remove it from $joins
+      var firstJoin: (String, (String, String)) = null
+      for (j <- joins.entries) {
+        if (j.getKey == startingJoin._1._1 && j.getValue._1 == startingJoin._1._2)
+          firstJoin = startingJoin._1._1 -> (startingJoin._1._2, j.getValue._2)
+      }
+      logger.info(s"- Starting join: $firstJoin \n")
+
+      // Final global join
+      finalDataSet = executor.join(joins, prefixes, star_df, edgeIdMap, sc)
+
+      //finalDataSet.asInstanceOf[DataFrame].printSchema()
+
+      // finalDataSet = executor.joinReordered(joins, prefixes, star_df, firstJoin, starWeights)
+    } else {
+      logger.info(s" Single star query")
+      finalDataSet = star_df.head._2
+    }
 
     // Project out columns from the final global join results
     var columnNames = Seq[String]()
@@ -283,13 +315,10 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 
     logger.info(s"--> SELECTED column names: $columnNames") // TODO: check the order of PROJECT and ORDER-BY
 
-
     var nb_orderby = 0
-    var orderby: Boolean = false
     if (orderBys != null) {
-      nb_orderby = orderBys.size
-      orderby = true
       logger.info(s"orderBys: $orderBys")
+      nb_orderby = orderBys.size
 
       var orderByList: Set[(String, String)] = Set()
       for (o <- orderBys) {
@@ -304,69 +333,31 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       logger.info(s"ORDER BY list: $orderByList (-1 ASC, -2 DESC)") // TODO: (-1 ASC, -2 DESC) confirm with multiple order-by's
 
       for (o <- orderByList) {
-        variable = o._1
+        val variable = o._1
         val direction = o._2
-        //finalDataSet = executor.orderBy(finalDataSet, direction, variable)
+        finalDataSet = executor.orderBy(finalDataSet, direction, variable, sc)
       }
     }
 
-    if (starsNbr > 1) {
-      logger.info(s"- Here are the (Star, ParSet) pairs:")
-      logger.info("Join Pairs: " + joinPairs)
+    logger.info("|__ Has distinct? " + distinct)
 
-      if (starsNbr > 1) logger.info(s"- Here are join pairs: $joins") else logger.info("No join detected.")
-      logger.info(s"- Number of predicates per star: $starNbrFilters ")
+    finalDataSet = executor.project(finalDataSet, columnNames, distinct)
 
-      val starWeights = pl.sortStarsByWeight(starDataTypesMap, starNbrFilters, configFile)
-      logger.info(s"- Stars weighted (performance + nbr of filters): $starWeights \n")
-
-      val sortedScoredJoins = pl.reorder(joins, starDataTypesMap, starNbrFilters, starWeights, configFile)
-      logger.info(s"- Sorted scored joins: $sortedScoredJoins")
-      val startingJoin = sortedScoredJoins.head
-
-      // Convert starting join to: (leftStar, (rightStar, joinVar)) so we can remove it from $joins
-      var firstJoin: (String, (String, String)) = null
-      for (j <- joins.entries) {
-        if (j.getKey == startingJoin._1._1 && j.getValue._1 == startingJoin._1._2)
-          firstJoin = startingJoin._1._1 -> (startingJoin._1._2, j.getValue._2)
-      }
-      logger.info(s"- Starting join: $firstJoin \n")
-
-      // Final global join
-      val (a,b) = executor.join(joins, prefixes, star_df, edgeIdMap, columnNames)
-      finalDataSet = a
-      finalHeader = b
-      //finalDataSet.asInstanceOf[DataFrame].printSchema()
-
-      // finalDataSet = executor.joinReordered(joins, prefixes, star_df, firstJoin, starWeights)
-    } else {
-      logger.info(s" Single star query")
-      finalDataSet = star_df.head._2
-      logger.info("|__ Has distinct? " + distinct)
-      val (finalDataSet1,finalHeader1) = executor.project(finalDataSet, columnNames, edgeIdMap)
-      finalDataSet = finalDataSet1
-      finalHeader = finalHeader1
+    if (limit > 0) {
+      finalDataSet = executor.limit(finalDataSet, limit)
     }
-
-    //if (limit > 0)
-    //  finalDataSet = executor.limit(finalDataSet, limit)
 
     //val stopwatch: StopWatch = new StopWatch
     //stopwatch start()
 
-    val startTimeMillis = System.currentTimeMillis()
+ //   val startTimeMillis = System.currentTimeMillis()
 
-    val nb_resuts  = executor.run(finalDataSet, variable ,limit, orderby, distinct, finalHeader)
+    val nb_resuts = executor.run(finalDataSet)
 
  //   val endTimeMillis = System.currentTimeMillis()
- //   val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
-//    println("Time taken solely by the actual query execution" + durationSeconds)
+  //  val durationSeconds = (endTimeMillis - startTimeMillis) // 1000
+   // println("Time taken solely by the actual query execution" + durationSeconds)
 
-    //stopwatch stop()
-
-    //val timeTaken = stopwatch.getTime
-
-    //println(s"Time taken solely by the actual query execution: $timeTaken")
     stopwatch stop()
     val Query_Execution = stopwatch.getTime
 
@@ -377,7 +368,8 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
     val memo_usage =(max_memo-remain_memo)/mb
     val cpu = sc.defaultParallelism
 
-    val query_info =  Array(nb_resuts.toString,
+    val query_info =  Array(
+      nb_resuts.toString,
       starsNbr.toString,
       joinPairs.size.toString,
       columnNames.size.toString,
@@ -393,6 +385,7 @@ class RunGraph[A] (executor: QueryExecutorGraph[A]) {
       memo_usage.toString,
       cpu.toString
     )
+
     (query_info,exec_time_info)
   }
 }

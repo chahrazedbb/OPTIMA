@@ -1,14 +1,9 @@
-package org.squerall
+package optima
 
 import org.slf4j.{Logger, LoggerFactory}
 
 import scala.language.implicitConversions
 
-/**
-  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
-  * logging messages at different levels using methods that only evaluate parameters lazily if the
-  * log level is enabled.
-  */
 trait MyLogger {
 
   @transient private var log_ : Logger = _

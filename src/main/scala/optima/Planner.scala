@@ -1,22 +1,17 @@
-package org.squerall
-
-import java.util
+package optima
 
 import com.google.common.collect.ArrayListMultimap
 import com.typesafe.scalalogging.Logger
-import org.squerall.Helpers._
 import play.api.libs.functional.syntax._
 import play.api.libs.json.{Json, Reads, __}
 
+import java.util
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-/**
- * Created by mmami on 06.07.17.
- */
 class Planner(stars: mutable.HashMap[String, mutable.Set[(String, String)]] with mutable.MultiMap[String, (String, String)]) {
 
     val logger = Logger("Squerall")

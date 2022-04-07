@@ -1,6 +1,4 @@
-package org.squerall
-
-import java.util
+package optima
 
 import com.google.common.collect.ArrayListMultimap
 import com.typesafe.scalalogging.Logger
@@ -8,6 +6,7 @@ import org.apache.jena.query.{QueryExecutionFactory, QueryFactory}
 import org.apache.jena.rdf.model.ModelFactory
 import org.apache.jena.util.FileManager
 
+import java.util
 import scala.collection.mutable
 
 class Helpers() {

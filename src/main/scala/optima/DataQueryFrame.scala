@@ -1,4 +1,4 @@
-package org.squerall.model
+package optima
 
 import scala.collection.mutable.ListBuffer
 

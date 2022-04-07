@@ -1,19 +1,14 @@
-package org.squerall
-
-import java.util
+package optima
 
 import com.google.common.collect.ArrayListMultimap
+import optima.Helpers.{get_NS_predicate, invertMap}
 import org.apache.jena.query.QueryFactory
 import org.apache.jena.sparql.syntax.{ElementFilter, ElementVisitorBase, ElementWalker}
-import org.squerall.Helpers._
 
+import java.util
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-
-/**
-  * Created by mmami on 05.07.17.
-  */
 
 class QueryAnalyser(query: String) {
 

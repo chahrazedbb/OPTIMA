@@ -1,4 +1,4 @@
-package org.squerall.model;
+package optima.model;
 
 /**
  * Created by mmami on 10.10.16.
