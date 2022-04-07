@@ -9,11 +9,7 @@ import org.apache.jena.rdf.model.ModelFactory
 import org.apache.jena.util.FileManager
 
 import scala.collection.mutable
-//import org.mongodb.scala._
 
-/**
-  * Created by mmami on 26.07.17.
-  */
 class Helpers() {
 
 }
