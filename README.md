@@ -6,8 +6,8 @@ OPTIMA is an Ontology-Based Big Data Access (Smeantic Data Lakes) that supports 
 
 Currently OPTIMA integrates:
 - Two different virtual data models, GRAPH and TABULAR, to join and aggregate data.
-– Deep learning method to select automatically the optimal virtual model based on query.
-– It implements the state-of-the-art Big Data engines Apache Spark and Spark Graphx and supports out-of-the-box five data sources Neo4j, MongoDB, MySQL, Cassandra and CSV.
+- Deep learning method to select automatically the optimal virtual model based on query.
+- State-of-the-art Big Data engines Apache Spark and Spark Graphx and supports out-of-the-box five data sources Neo4j, MongoDB, MySQL, Cassandra and CSV.
 
 ## Usage (Live Demo)
 
