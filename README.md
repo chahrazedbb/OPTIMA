@@ -21,9 +21,10 @@ To enable the reproducibility of OPTIMA, we refer first to the baiscs on the fol
 
 ## Architecture Overview
 
-OPTIMA...
+OPTIMA' virtual data model prediction component selects the optimal virtual data model GRAPH or TABULAR based on the query behavior. 
+The rest of the OBDA components make use of the selected virtual data model GRAPH or TABULAR for querying.
 
-![OPTIMA architecture]()
+![OPTIMA architecture](docs/Optima_architecture.png)
 
 ## Getting Started
 __Local setup:__
@@ -51,13 +52,13 @@ __Local setup:__
 
 
 __DISCLAIMER:__
-The steps above are valid to run in Ubuntu version...
+The steps above are valid to run in Ubuntu 20.04.4 LTS
 
 
 __Major Versions:__
-- Scala XX
-- Graphx XX
-- Spark XX
+- Scala 2.11
+- Graphx 2.3.4
+- Spark 2.3.4
 
 __Troubleshooting:__
 - check if node version compatibility for front and api then 
