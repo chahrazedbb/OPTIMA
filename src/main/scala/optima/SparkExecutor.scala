@@ -93,8 +93,6 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                 case "csv" =>
                     df = spark.read.options(options).csv(sourcePath)
                 //    println(s"++++++ loading time : $timeTaken")
-
-                case "parquet" => df = spark.read.options(options).parquet(sourcePath)
                 case "cassandra" =>
                     df = spark.read.format("org.apache.spark.sql.cassandra").options(options).load
                 case "elasticsearch" =>
@@ -108,12 +106,7 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     df = spark.read.format("com.mongodb.spark.sql").options(mongoOptions.asOptions).load
                 case "jdbc" =>
                     df = spark.read.format("jdbc").options(options).load()
-                case "rdf" =>
-                    import collection.JavaConversions._
-                    val rdf = new NTtoDF()
-                    df = rdf.options(options).read(sourcePath, sparkURI).toDF()
                 case "neo4j" =>
-
                     val values = options.values.toList
                     val table_name = values(1)
                     val neo = Neo4j(sc)

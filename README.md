@@ -12,7 +12,7 @@ Currently OPTIMA integrates:
 ## Usage (Live Demo)
 
 We provide a [live demo version](http:/) of OPTIMA, which can be used to try our software without registration.
-Additionally, [this short video](https://youtu) shows the exucution of queries ...
+Additionally, [this short video](docs/optima-demo.mp4) shows an example of a query execution in case the predicted optimal virtual data model is GRAPH.
 
 ![img.png](screenshot01.png)
 
@@ -64,14 +64,35 @@ __Troubleshooting:__
 - check if node version compatibility for front and api then 
 
 ## Technical Workflow
-After starting OPTIMA, use the follwing queries to test it. 
+After starting OPTIMA, you can test it by using one of the queries available in [queries repo](evaluation/queries).
+
+### Example
+```
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+
+SELECT  DISTINCT ?label ?comment ?propertyNum1 ?product
+WHERE {
+	?product rdfs:label ?label .
+	?product rdfs:comment ?comment .
+	?product bsbm:productPropertyNumeric1 ?propertyNum1 .
+	?product rdf:type bsbm:Product .
+	FILTER (?label = "ahchoo") .
+	FILTER (?propertyNum1 <= 1000) .
+}
+```
 
 ## Evaluation
-TO test OPIMA you can use the follwing files and queries....
+To test OPTIMA you can use the input files and queries available in [evaluation repo](evaluation).
 
 ## Extensibility
-OPTIMA can be extented by adding follwing connectors .....
+OPTIMA can be extented by adding new connectors. For example to connect to parquet database use the parquet connector as follows:
 
+#### For TABULAR
+``` spark.read.options(options).parquet(sourcePath)```
+#### For GRAPH
+``` sqlContext.read.(sourcePath).rdd ```
 ## Publications
 - 
 
