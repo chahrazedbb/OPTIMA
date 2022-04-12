@@ -84,6 +84,9 @@ WHERE {
 ```
 
 ## Evaluation
+We use an adopted version of [BSBM benchmark](bizer2009berlin) where five tables Product, Offer, Review, Person and Producer are distributed among different data storage.
+The tables are loaded in five different data sources Cassandra, MongoDB, CSV, Neo4j and MySQL.
+
 To test OPTIMA you can use the input files and queries available in [evaluation repo](evaluation).
 
 ## Extensibility
