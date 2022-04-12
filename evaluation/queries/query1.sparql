@@ -1,0 +1,13 @@
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+
+SELECT  DISTINCT ?label ?comment ?propertyNum1 ?product
+WHERE {
+	?product rdfs:label ?label .
+	?product rdfs:comment ?comment .
+	?product bsbm:productPropertyNumeric1 ?propertyNum1 .
+	?product rdf:type bsbm:Product .
+	FILTER (?label = "ahchoo") .
+	FILTER (?propertyNum1 <= 1000) .
+}

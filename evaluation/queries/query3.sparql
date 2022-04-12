@@ -1,0 +1,37 @@
+PREFIX exp: <http://example.com/ns/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX schema: <http://schema.org/>
+PREFIX gr: <http://purl.org/goodrelations/v1#>
+PREFIX npg: <http://ns.nature.com/terms/>
+PREFIX foaf: <http://xmlns.com/foaf/spec/>
+PREFIX edm: <http://www.europeana.eu/schemas/edm/>
+PREFIX rr: <http://www.w3.org/ns/r2rml#>
+PREFIX rml: <http://semweb.mmlab.be/ns/rml#>
+PREFIX nosql: <http://purl.org/db/nosql#>
+PREFIX bsbm: <http://www4.wiwiss.fu-berlin.de/bizer/bsbm/v01/vocabulary/>
+PREFIX dc: <http://purl.org/dc/elements/1.1/>
+PREFIX rev: <http://purl.org/stuff/rev#>
+
+SELECT  DISTINCT ?vendor ?price ?label ?comment ?reviewDate ?title
+WHERE {
+	?offer bsbm:vendor ?vendor .
+	?offer bsbm:price ?price .
+	?product rdfs:label ?label .
+	?product rdfs:comment ?comment .
+	?review bsbm:reviewDate ?reviewDate .
+	?review dc:title ?title .
+	?offer rdf:type schema:Offer .
+	?product rdf:type bsbm:Product .
+	?review rdf:type schema:Review .
+	?offer bsbm:product ?product . 
+	?review  bsbm:producer ?product .
+	FILTER (?vendor > 7350  ) .
+	FILTER (?price <= 1000 ) .
+	FILTER (?label = "ahchoo") .
+	FILTER (?reviewDate = "1914-10-14" ) .
+	FILTER (?title = "wowed lynches unbiasedly branched") .
+}
+ORDER BY ?vendor
+LIMIT 200
