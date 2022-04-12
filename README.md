@@ -14,7 +14,7 @@ Currently OPTIMA integrates:
 We provide a [live demo version](http:/) of OPTIMA, which can be used to try our software without registration.
 Additionally, [this short video](docs/optima-demo.mp4) shows an example of a query execution in case the predicted optimal virtual data model is GRAPH.
 
-![img.png](screenshot01.png)
+![video](docs/optima-demo.mp4)
 
 
 To enable the reproducibility of OPTIMA, we refer first to the baiscs on the following  Wiki page: [OPTIMA Basics](https://github.com/). which also helps understand the installation steps hereafter.
