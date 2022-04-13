@@ -32,22 +32,34 @@ __Local setup:__
 
 1. Clone the repository
 
+### Spark
+- Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
+
+- Once Spark is installed, navigate to `bin` folder and run `spark-submit`
+
+- #### Example:
+
 
 ### Spark Graphx
 - Download Spark GraphX API (https://spark.apache.org/docs/latest/graphx-programming-guide.html) from the [Spark official website](https://spark.apache.org/...). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
 
-- #### Example:
+- #### Example: 
 
+### TorchServe
+- To be able to use the OPTIMA-machine-learning model in OPTIMA project we deploy the model as a service using TorchServe. TorchServe is a flexible tool for serving PyTorch torschripted models.
+  - install TorchServe and torch-model-archiver following the guidlines in [serve documentation page](https://github.com/pytorch/serve). 
+  - Download OPTIMA pre-trained model from [OPTIMA-ML repo]()
+  - Archive the OPTIMA pre-trained model using the model archiver.
+
+    ```
+    torch-model-archiver --model-name OPTIMA_trained_model --version 1.0 --model-file model.py --serialized-file OPTIMA_trained_model.pth --handler virtual_model_handler.py
+    ```
+  - Start TorchServe to serve the model 
+    ```
+    torchserve --start --ncs --model-store model_store --models OPTIMA_trained_model.mar
+    ```
 
   **- Note:** If any error raised due to 
-
-### Spark
-- Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
-
-- Once Spark is installed, navigate to `bin` folder and run `spark-submit` 
-
-- #### Example:
-
 
 
 
