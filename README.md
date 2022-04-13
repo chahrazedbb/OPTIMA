@@ -30,20 +30,14 @@ The rest of the OBDA components make use of the selected virtual data model GRAP
 __Local setup:__
 *- Prerequisite:* 
 
-1. Clone the repository
+```
+git clone https://github.com/chahrazedbb/OPTIMA.git
+cd OPTIMA
+mvn package
+cd target
+```
 
-### Spark
-- Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
-
-- Once Spark is installed, navigate to `bin` folder and run `spark-submit`
-
-- #### Example:
-
-
-### Spark Graphx
-- Download Spark GraphX API (https://spark.apache.org/docs/latest/graphx-programming-guide.html) from the [Spark official website](https://spark.apache.org/...). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
-
-- #### Example: 
+The depp learning model built on top of OPTIMA aims to select the optimal virtual data model GRAPH or TABULAR based on the query behavior. This component addresses the challenge of selecting optimal virtual data model by receiving the SPARQL query as input and predicts the cost against each virtual data model using deep neural network.
 
 ### TorchServe
 - To be able to use the OPTIMA-machine-learning model in OPTIMA project we deploy the model as a service using TorchServe. TorchServe is a flexible tool for serving PyTorch torschripted models.
@@ -58,6 +52,22 @@ __Local setup:__
     ```
     torchserve --start --ncs --model-store model_store --models OPTIMA_trained_model.mar
     ```
+
+OPTIMA uses Spark as query engine. However, it implements two virtual data models GRAPH and TABULAR. For GRAPh Virtual Data Model the Spark Graphx API is used and For TABULAR Virtual Data Model, the Apache Spark API is used. Therefore Spark with both libriries (Spark Graphx and Apache Spark) has to be installed beforehand. The selection of Optimal Virtural Data Model GRAPH or TABULAR is based on deep learning model based on query bevahior introduced above. 
+
+### Spark
+- Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
+
+- Once Spark is installed, navigate to `bin` folder and run `spark-submit`
+
+- #### Example:
+
+
+### Spark Graphx
+- Download Spark GraphX API (https://spark.apache.org/docs/latest/graphx-programming-guide.html) from the [Spark official website](https://spark.apache.org/...). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
+
+- #### Example: 
+
 
   **- Note:** If any error raised due to 
 
