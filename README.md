@@ -12,7 +12,7 @@ Currently OPTIMA integrates:
 ## Usage (Live Demo)
 
 We provide a [live demo version](http:/) of OPTIMA, which can be used to try our software without registration.
-Additionally, [this short video](docs/OPTIMA-demo.mp4) shows an example of a query execution in both cases GRAPH and TABULAR.
+Additionally, [this short video](docs/OPTIMA-demo.mp4) shows an example of a query execution in case the predicted optimal virtual data model is GRAPH.
 
 ![video](docs/optima-demo.mp4)
 
@@ -21,14 +21,14 @@ To enable the reproducibility of OPTIMA, we refer first to the baiscs on the fol
 
 ## Architecture Overview
 
-OPTIMA' virtual data model prediction component selects the optimal virtual data model GRAPH or TABULAR based on the query behavior. 
+OPTIMA' virtual data model prediction component selects the optimal virtual data model GRAPH or TABULAR based on the query behavior.
 The rest of the OBDA components make use of the selected virtual data model GRAPH or TABULAR for querying.
 
 ![OPTIMA architecture](docs/Optima_architecture.png)
 
 ## Getting Started
 __Local setup:__
-*- Prerequisite:* 
+*- Prerequisite:*
 
 ```
 git clone https://github.com/chahrazedbb/OPTIMA.git
@@ -41,19 +41,19 @@ The depp learning model built on top of OPTIMA aims to select the optimal virtua
 
 ### TorchServe
 - To be able to use the OPTIMA-machine-learning model in OPTIMA project we deploy the model as a service using TorchServe. TorchServe is a flexible tool for serving PyTorch torschripted models.
-  - install TorchServe and torch-model-archiver following the guidlines in [serve documentation page](https://github.com/pytorch/serve). 
+  - install TorchServe and torch-model-archiver following the guidlines in [serve documentation page](https://github.com/pytorch/serve).
   - Download OPTIMA pre-trained model from [OPTIMA-ML repo]()
   - Archive the OPTIMA pre-trained model using the model archiver.
 
     ```
     torch-model-archiver --model-name OPTIMA_trained_model --version 1.0 --model-file model.py --serialized-file OPTIMA_trained_model.pth --handler virtual_model_handler.py
     ```
-  - Start TorchServe to serve the model 
+  - Start TorchServe to serve the model
     ```
     torchserve --start --ncs --model-store model_store --models OPTIMA_trained_model.mar
     ```
 
-OPTIMA uses Spark as query engine. However, it implements two virtual data models GRAPH and TABULAR. For GRAPh Virtual Data Model the Spark Graphx API is used and For TABULAR Virtual Data Model, the Apache Spark API is used. Therefore Spark with both libriries (Spark Graphx and Apache Spark) has to be installed beforehand. The selection of Optimal Virtural Data Model GRAPH or TABULAR is based on deep learning model based on query bevahior introduced above. 
+OPTIMA uses Spark as query engine. However, it implements two virtual data models GRAPH and TABULAR. For GRAPh Virtual Data Model the Spark Graphx API is used and For TABULAR Virtual Data Model, the Apache Spark API is used. Therefore Spark with both libriries (Spark Graphx and Apache Spark) has to be installed beforehand. The selection of Optimal Virtural Data Model GRAPH or TABULAR is based on deep learning model based on query bevahior introduced above.
 
 ### Spark
 - Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
@@ -66,10 +66,10 @@ OPTIMA uses Spark as query engine. However, it implements two virtual data model
 ### Spark Graphx
 - Download Spark GraphX API (https://spark.apache.org/docs/latest/graphx-programming-guide.html) from the [Spark official website](https://spark.apache.org/...). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
 
-- #### Example: 
+- #### Example:
 
 
-  **- Note:** If any error raised due to 
+**- Note:** If any error raised due to
 
 
 
@@ -83,7 +83,7 @@ __Major Versions:__
 - Spark 2.3.4
 
 __Troubleshooting:__
-- check if node version compatibility for front and api then 
+- check if node version compatibility for front and api then
 
 ## Technical Workflow
 After starting OPTIMA, you can test it by using one of the queries available in [queries repo](evaluation/queries).
