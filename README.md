@@ -12,7 +12,7 @@ Currently OPTIMA integrates:
 ## Usage (Live Demo)
 
 We provide a [live demo version](http:/) of OPTIMA, which can be used to try our software without registration.
-Additionally, [this short video](docs/optima-demo.mp4) shows an example of a query execution in case the predicted optimal virtual data model is GRAPH.
+Additionally, [this short video](docs/OPTIMA-demo.mp4) shows an example of a query execution in both cases GRAPH and TABULAR.
 
 ![video](docs/optima-demo.mp4)
 
