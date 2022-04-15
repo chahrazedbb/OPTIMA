@@ -57,18 +57,10 @@ OPTIMA uses Spark as query engine and implements two virtual data models GRAPH a
 ### Spark
 - Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
 
-- Once Spark is installed, navigate to `bin` folder and run `spark-submit`
-
-- #### Example:
-
 
 ### Spark Graphx
 - Download Spark GraphX API (https://spark.apache.org/docs/latest/graphx-programming-guide.html) from the [Spark official website](https://spark.apache.org/...). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
 
-- #### Example:
-
-
-Query file (query.sparql) and mapping file (mapping.ttl) are available in [evaluation repo](evaluation)
 
 __DISCLAIMER:__
 - The steps above are valid to run in Ubuntu 20.04.4 LTS, Maven and intellij IDE
@@ -83,6 +75,13 @@ __Troubleshooting:__
 
 ## Technical Workflow
 After starting OPTIMA, you can test it by using one of the queries available in [queries repo](evaluation/queries).
+
+### Perquisite Input and output
+To enable querying distributed heterogeneous large data source using the ontology-based big data access principles, to do so OPTIMA requires the following inputs:   
+- Data sources (CSV file) 
+- Query file (query.sparql) 
+- Mapping file (mapping.ttl) are available in [evaluation repo](evaluation)
+Output is the SAPRQL query result 
 
 ### Example
 ```
@@ -101,7 +100,6 @@ WHERE {
 }
 ```
 The query can be tested using GRAPH and TABULAR to get an overview about time difference between the two models. GRAPH can be faster than TABULAR for some queries and vice versa.
-
 
 ## Evaluation
 We use an adopted version of [BSBM benchmark](bizer2009berlin) where five tables Product, Offer, Review, Person and Producer are distributed among different data storage.
