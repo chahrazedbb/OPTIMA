@@ -84,6 +84,8 @@ To enable querying distributed heterogeneous large data source using the ontolog
 Output is the SAPRQL query result 
 
 ### Example
+The query can be tested using GRAPH and TABULAR to get an overview about time difference between the two models. GRAPH can be faster than TABULAR for some queries and vice versa.
+
 ```
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -99,7 +101,7 @@ WHERE {
 	FILTER (?propertyNum1 <= 1000) .
 }
 ```
-The query can be tested using GRAPH and TABULAR to get an overview about time difference between the two models. GRAPH can be faster than TABULAR for some queries and vice versa.
+
 
 ## Evaluation
 We use an adopted version of [BSBM benchmark](bizer2009berlin) where five tables Product, Offer, Review, Person and Producer are distributed among different data storage.
