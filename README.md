@@ -70,10 +70,6 @@ OPTIMA uses Spark as query engine and implements two virtual data models GRAPH a
 
 Query file (query.sparql) and mapping file (mapping.ttl) are available in [evaluation repo](evaluation)
 
-**- Note:** If any error raised due to
-
-
-
 __DISCLAIMER:__
 - The steps above are valid to run in Ubuntu 20.04.4 LTS, Maven and intellij IDE
 
@@ -83,7 +79,7 @@ __Major Versions:__
 - Spark 2.3.4
 
 __Troubleshooting:__
-- check if node version compatibility for front and api then
+- If any error raised check if node version compatibility.
 
 ## Technical Workflow
 After starting OPTIMA, you can test it by using one of the queries available in [queries repo](evaluation/queries).
