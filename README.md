@@ -68,6 +68,8 @@ OPTIMA uses Spark as query engine and implements two virtual data models GRAPH a
 - #### Example:
 
 
+Query file (query.sparql) and mapping file (mapping.ttl) are available in [evaluation repo](evaluation)
+
 **- Note:** If any error raised due to
 
 
@@ -118,10 +120,8 @@ OPTIMA can be extented by adding new connectors. For example to connect to parqu
 ``` spark.read.options(options).parquet(sourcePath)```
 #### For GRAPH
 ``` sqlContext.read.(sourcePath).rdd ```
-## Publications
-- 
 
-## How to cite
+## Publications and How to cite
 We are currently preparing a scientific paper for a peer-reviewed publication. Please refer to [references.bib](references.bib) for BibTex references, which we will update continuously.
 
 ## Contact
