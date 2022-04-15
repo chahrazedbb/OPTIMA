@@ -28,7 +28,6 @@ The rest of the OBDA components make use of the selected virtual data model GRAP
 
 ## Getting Started
 __Local setup:__
-*- Prerequisite:*
 
 ```
 git clone https://github.com/chahrazedbb/OPTIMA.git
@@ -53,7 +52,7 @@ The depp learning model built on top of OPTIMA aims to select the optimal virtua
     torchserve --start --ncs --model-store model_store --models OPTIMA_trained_model.mar
     ```
 
-OPTIMA uses Spark as query engine. However, it implements two virtual data models GRAPH and TABULAR. For GRAPh Virtual Data Model the Spark Graphx API is used and For TABULAR Virtual Data Model, the Apache Spark API is used. Therefore Spark with both libriries (Spark Graphx and Apache Spark) has to be installed beforehand. The selection of Optimal Virtural Data Model GRAPH or TABULAR is based on deep learning model based on query bevahior introduced above.
+OPTIMA uses Spark as query engine and implements two virtual data models GRAPH and TABULAR. For GRAPh Virtual Data Model the Spark Graphx API is used and For TABULAR Virtual Data Model, the Apache Spark API is used. Therefore, Spark with both libriries (Spark Graphx and Apache Spark) has to be installed beforehand. The selection of Optimal Virtural Data Model GRAPH or TABULAR is based on deep learning model based on query bevahior introduced above.
 
 ### Spark
 - Download Spark from the [Spark official website](https://spark.apache.org/downloads.html). In order for Spark to run in a cluster, you need to configure a 'standalone cluster' following guidelines in the [official documentation page](https://spark.apache.org/docs/2.2.0/spark-standalone.html).
@@ -74,8 +73,7 @@ OPTIMA uses Spark as query engine. However, it implements two virtual data model
 
 
 __DISCLAIMER:__
-The steps above are valid to run in Ubuntu 20.04.4 LTS
-
+- The steps above are valid to run in Ubuntu 20.04.4 LTS, Maven and intellij IDE
 
 __Major Versions:__
 - Scala 2.11
@@ -104,6 +102,8 @@ WHERE {
 	FILTER (?propertyNum1 <= 1000) .
 }
 ```
+The query can be tested using GRAPH and TABULAR to get an overview about time difference between the two models. GRAPH can be faster than TABULAR for some queries and vice versa.
+
 
 ## Evaluation
 We use an adopted version of [BSBM benchmark](bizer2009berlin) where five tables Product, Offer, Review, Person and Producer are distributed among different data storage.
