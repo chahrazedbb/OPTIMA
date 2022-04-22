@@ -1,22 +1,22 @@
 package optima
 
+import java.util
+
 import com.google.common.collect.ArrayListMultimap
-import optima.Helpers.{get_NS_predicate, invertMap}
 import org.apache.jena.query.QueryFactory
 import org.apache.jena.sparql.syntax.{ElementFilter, ElementVisitorBase, ElementWalker}
+import optima.Helpers._
 
-import java.util
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-
-/*
-  Copyright University of Bonn
-  https://github.com/EIS-Bonn/Squerall/
-  Author: Najib Mohamed Mami
-  Licensed under the Apache License, Version 2.0 (the "License");
-*/
+/**
+ * Copyright University of Bonn
+ * https://github.com/EIS-Bonn/Squerall/
+ * Author: Najib Mohamed Mami
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ */
 
 class QueryAnalyser(query: String) {
 

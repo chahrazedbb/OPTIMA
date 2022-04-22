@@ -1,0 +1,75 @@
+{
+	"sources": [
+	{
+		"type": "csv",
+		"options": {
+			"header": "true",
+			"delimiter": ",",
+			"mode": "DROPMALFORMED"
+		},
+		"source": "src/main/evaluation/small_data/person.csv",
+		"entity": "Person"
+	}
+	,	{
+		"type": "csv",
+		"options": {
+			"header": "true",
+			"delimiter": ",",
+			"mode": "DROPMALFORMED"
+		},
+		"source": "src/main/evaluation/small_data/review.csv",
+		"entity": "Review"
+	}
+	,	{
+		"type": "csv",
+		"options": {
+			"header": "true",
+			"delimiter": ",",
+			"mode": "DROPMALFORMED"
+		},
+		"source": "src/main/evaluation/small_data/offer.csv",
+		"entity": "Offer"
+	}
+	,	{"type": "csv",
+		"options": {
+			"header": "true",
+			"delimiter": ",",
+			"mode": "DROPMALFORMED"
+		},
+		"source": "src/main/evaluation/small_data/product.csv",
+		"entity": "Product"
+	}
+	,	{
+		"type": "csv",
+		"options": {
+			"header": "true",
+			"delimiter": ",",
+			"mode": "DROPMALFORMED"
+		},
+		"source": "src/main/evaluation/small_data/producer.csv",
+		"entity": "Producer"
+	}
+	],
+    "weights": [
+        {
+            "datasource": "cassandra",
+            "weight": 3
+        },
+        {
+            "datasource": "mongodb",
+            "weight": 5
+        },
+        {
+            "datasource": "parquet",
+            "weight": 2
+        },
+        {
+            "datasource": "csv",
+            "weight": 1
+        },
+        {
+            "datasource": "jdbc",
+            "weight": 4
+        }
+    ]
+}

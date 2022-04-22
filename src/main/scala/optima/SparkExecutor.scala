@@ -1,18 +1,27 @@
 package optima
 
+import java.util
 import com.google.common.collect.ArrayListMultimap
 import com.mongodb.spark.config.ReadConfig
 import com.typesafe.scalalogging.Logger
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, SparkSession}
-import org.apache.spark.{SparkConf, SparkContext}
-import org.squerall.NTtoDF
-
-import java.util
+import org.neo4j.spark.Neo4jConfig
+import optima.Helpers._
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import optima.NTtoDF._
+
+/**
+  * Copyright University of Bonn
+  * https://github.com/EIS-Bonn/Squerall/
+  * https://github.com/chahrazedbb/OPTIMA.git/
+  * Author: Najib Mohamed Mami, modified by CHahrazed Bachir belmehdi
+  * Licensed under the Apache License, Version 2.0 (the "License");
+*/
 
 /*
   Copyright University of Bonn
@@ -101,6 +110,8 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                 case "csv" =>
                     df = spark.read.options(options).csv(sourcePath)
                 //    println(s"++++++ loading time : $timeTaken")
+
+                case "parquet" => df = spark.read.options(options).parquet(sourcePath)
                 case "cassandra" =>
                     df = spark.read.format("org.apache.spark.sql.cassandra").options(options).load
                 case "elasticsearch" =>
@@ -114,7 +125,12 @@ class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecuto
                     df = spark.read.format("com.mongodb.spark.sql").options(mongoOptions.asOptions).load
                 case "jdbc" =>
                     df = spark.read.format("jdbc").options(options).load()
+                case "rdf" =>
+                    import collection.JavaConversions._
+                    val rdf = new NTtoDF()
+                    df = rdf.options(options).read(sourcePath, sparkURI).toDF()
                 case "neo4j" =>
+                    import org.neo4j.spark._
                     val values = options.values.toList
                     val table_name = values(1)
                     val neo = Neo4j(sc)

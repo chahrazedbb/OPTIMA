@@ -1,15 +1,19 @@
 package optima
 
 import com.google.common.collect.ArrayListMultimap
+import org.apache.spark.SparkContext
+import org.apache.spark.graphx.VertexId
+import org.apache.spark.rdd.RDD
 
 import java.util
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
 
   /* Generates a ParSet with the number of filters (on predicates) in the star */
-  def query(sources: mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
-            optionsMap: mutable.HashMap[String, (Map[String, String], String)],
+  def query(sources : mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String, Boolean)])],
+            optionsMap: mutable.HashMap[String, (Map[String, String],String)],
             toJoinWith: Boolean,
             star: String,
             prefixes: Map[String, String],
@@ -19,22 +23,22 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
             filters: ArrayListMultimap[String, (String, String)],
             leftJoinTransformations: (String, Array[String]),
             rightJoinTransformations: Array[String],
-            joinPairs: Map[(String, String), String],
-            edgeId: Int
-           ): (T, Integer, String, Map[String, Array[String]], SparkContext)
+            joinPairs: Map[(String,String), String],
+            edgeId:Int
+           ) : (T, Integer, String, Map[String, Array[String]], SparkContext)
 
   /* Transforms a ParSet to another ParSet based on the SPARQL TRANSFORM clause */
-  def transform(ps: Any, column: String, transformationsArray: Array[String]): Any
+  def transform(ps: Any, column: String, transformationsArray : Array[String]): Any
 
   /* Print the schema of the ParSet */
   def join(joins: ArrayListMultimap[String, (String, String)],
            prefixes: Map[String, String],
-           star_df: Map[String, T],
-           edgeIdMap: Map[String, Array[String]],
-           columnNames: Seq[String]): (T, String)
+           star_df: Map[String,T],
+           edgeIdMap: Map[String,Array[String]],
+           columnNames: Seq[String]): (T,String)
 
   /* Generates a new ParSet projecting out one or more attributes */
-  def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String, Array[String]]): (T, String)
+  def project(jDF: Any, columnNames: Seq[String], edgeIdMap: Map[String,Array[String]]): (T, String)
 
   /* Counts the number of tuples of a ParSet */
   def count(joinPS: T): Long
@@ -43,14 +47,14 @@ trait QueryExecutorGraph[T] { // T is a ParSet (Parallel dataSet)
   def orderBy(joinPS: Any, direction: String, variable: String): T
 
   /* Group attributes based on aggregates function(s) */
-  def groupBy(joinPS: Any, groupBys: (ListBuffer[String], mutable.Set[(String, String)])): T
+  def groupBy(joinPS: Any, groupBys: (ListBuffer[String], mutable.Set[(String,String)])): T
 
   /* Return the first 'limitValue' values of the ParSet */
-  def limit(joinPS: Any, limitValue: Int): T
+  def limit(joinPS: Any, limitValue: Int) : T
 
   /* Show some results */
-  def show(PS: Any, variable: String, limit: Int, orderby: Boolean, distinct: Boolean, finalHeader: String): Double
+  def show(PS: Any, variable: String, limit: Int, orderby: Boolean, distinct: Boolean, finalHeader : String) : Double
 
   /* Compute the results */
-  def run(jDF: Any, variable: String, limit: Int, orderby: Boolean, distinct: Boolean, finalHeader: String): Double
+  def run(jDF: Any, variable: String, limit: Int, orderby: Boolean, distinct : Boolean, finalHeader : String) : Double
 }

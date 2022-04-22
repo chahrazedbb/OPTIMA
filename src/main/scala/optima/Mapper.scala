@@ -9,16 +9,16 @@ import play.api.libs.json._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-/*
-  Copyright University of Bonn
+/**
+Copyright University of Bonn
   https://github.com/EIS-Bonn/Squerall/
   Author: Najib Mohamed Mami
   Licensed under the Apache License, Version 2.0 (the "License");
-*/
+ **/
 
 class Mapper (mappingsFile: String) {
 
-    val logger = Logger("Squerall")
+//    val logger = Logger("Squerall")
 
     println("method findDataResources")
     def findDataSources(
@@ -37,28 +37,37 @@ class Mapper (mappingsFile: String) {
                                         mutable.HashMap[String, (Map[String, String],String)]
                                     )] = {
 
-        logger.info(queryString)
+        //logger.info(queryString)
         val starSources :
             mutable.Set[(
-                String,
-                mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String,Boolean)])],
-                mutable.HashMap[String, (Map[String, String], String)]
+                String, // Star core
+                mutable.Set[(mutable.HashMap[String, String], String, String, mutable.HashMap[String, (String,Boolean)])], // A set of data sources relevant to the Star (pred_attr, src, srcType)
+                mutable.HashMap[String, (Map[String, String], String)] // A set of options of each relevant data source
             )] = mutable.Set()
 
         var count = 0
 
         println("loop stars")
         for(s <-stars) {
-            val subject = s._1
+            println("put the subject into var s")
+            val subject = s._1 // core of the star
+            println("put the subject  o+p into var predicates_objects")
             val predicates_objects = s._2
 
-            logger.info(s"- Going to find datasources relevant to $subject...")
-
-            val ds = findDataSource(predicates_objects)
+            //logger.info(s"- Going to find datasources relevant to $subject...")
+            println("Going to find datasources relevant to the subject")
+            println("make call to the same method to find One or more relevant data sources")
+            val ds = findDataSource(predicates_objects) // One or more relevant data sources
             count = count + 1
 
+            // Options of relevant sources of one starOptions of relevant sources of one star
+            println("Options of relevant sources of one star")
             val optionsentityPerStar : mutable.HashMap[String, (Map[String,String],String)] = new mutable.HashMap()
 
+            println("Iterate through the relevant data sources to get options" +
+              "\n One star can have many relevant sources (containing its predicates)")
+            // Iterate through the relevant data sources to get options
+            // One star can have many relevant sources (containing its predicates)
             for(d <- ds) {
                 val src = d._2
                 val queryString = scala.io.Source.fromFile(configFile)
@@ -87,6 +96,8 @@ class Mapper (mappingsFile: String) {
 
             starSources.add((subject,ds,optionsentityPerStar))
         }
+        println("output the list of data  sources and options")
+        // return: subject (star core), list of (data source, options)
         starSources
     }
 
@@ -97,11 +108,15 @@ class Mapper (mappingsFile: String) {
 
         var temp = 0
 
+     //   logger.info("...with the (Predicate,Object) pairs: " + predicates_objects)
+
         for (v <- predicates_objects) {
             val predicate = v._1
 
             if (predicate == "rdf:type" || predicate == "a") {
+                //logger.info("...of class: " + v._2)
                 listOfPredicatesForQuery += "?mp rr:subjectMap ?sm . ?sm rr:class " + v._2 + " . "
+
             } else {
                 listOfPredicatesForQuery += "?mp rr:predicateObjectMap ?pom" + temp + " . " +
                   "?pom" + temp + " rr:predicate " + predicate + " . " +
@@ -143,11 +158,12 @@ class Mapper (mappingsFile: String) {
             val src = soln.get("src").toString
             val srcType = soln.get("type").toString
 
-          logger.info(">>> Relevant source detected [" + src + "] of type [" + srcType + "]") //NOTE: considering only first one src
+          //  logger.info(">>> Relevant source detected [" + src + "] of type [" + srcType + "]") //NOTE: considering only first one src
 
             val predicate_attribute: mutable.HashMap[String, String] = mutable.HashMap()
             val predicate_transformations: mutable.HashMap[String, (String, Boolean)] = mutable.HashMap()
 
+            // We will look for predicate transformations (subject transformations later on)
             for (p <- listOfPredicates) {
                 val getAttributeOfPredicate = "PREFIX rml: <http://semweb.mmlab.be/ns/rml#> " +
                   "PREFIX rr: <http://www.w3.org/ns/r2rml#>" +

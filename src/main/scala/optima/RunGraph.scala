@@ -3,16 +3,18 @@ package optima
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
 import org.apache.spark.SparkContext
+import optima.Helpers._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 
-/*
-  Copyright Institute of ESI-SBA
-  https://github.com/chahrazedbb/OPTIMA.git/
-  Author:  Chahrazed Bachir belmehdi
-  Licensed under the Apache License, Version 2.0 (the "License");
+/**
+  * Copyright Institute of ESI-SBA
+  * https://github.com/chahrazedbb/OPTIMA.git/
+  * Author:  Chahrazed Bachir belmehdi
+  * Licensed under the Apache License, Version 2.0 (the "License");
 */
+
 
 class RunGraph[A] (executor: QueryExecutorGraph[A]) {
 

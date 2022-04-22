@@ -3,10 +3,13 @@ package optima
 import com.typesafe.scalalogging.Logger
 import org.apache.commons.lang.time.StopWatch
 import org.apache.spark.SparkContext
+import optima.Helpers._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
-
+/**
+ * Created by mmami on 26.01.17.
+ */
 class Run[A] (executor: QueryExecutor[A]) {
 
   private var finalDataSet: A = _
