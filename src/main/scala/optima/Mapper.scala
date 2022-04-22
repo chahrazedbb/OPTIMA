@@ -9,6 +9,13 @@ import play.api.libs.json._
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+/*
+  Copyright University of Bonn
+  https://github.com/EIS-Bonn/Squerall/
+  Author: Najib Mohamed Mami
+  Licensed under the Apache License, Version 2.0 (the "License");
+*/
+
 class Mapper (mappingsFile: String) {
 
     val logger = Logger("Squerall")

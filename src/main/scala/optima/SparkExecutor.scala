@@ -14,6 +14,14 @@ import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
+/*
+  Copyright University of Bonn
+  https://github.com/EIS-Bonn/Squerall/
+  https://github.com/chahrazedbb/OPTIMA.git/
+  Author: Najib Mohamed Mami, modified by CHahrazed Bachir belmehdi
+  Licensed under the Apache License, Version 2.0 (the "License");
+*/
+
 class SparkExecutor(sparkURI: String, mappingsFile: String) extends QueryExecutor[DataFrame] {
 
     val logger = Logger("Squerall")

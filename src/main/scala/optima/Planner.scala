@@ -12,6 +12,13 @@ import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+/*
+  Copyright University of Bonn
+  https://github.com/EIS-Bonn/Squerall/
+  Author: Najib Mohamed Mami
+  Licensed under the Apache License, Version 2.0 (the "License");
+*/
+
 class Planner(stars: mutable.HashMap[String, mutable.Set[(String, String)]] with mutable.MultiMap[String, (String, String)]) {
 
     val logger = Logger("Squerall")
