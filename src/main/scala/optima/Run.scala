@@ -7,9 +7,7 @@ import optima.Helpers._
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
-/**
- * Created by mmami on 26.01.17.
- */
+
 class Run[A] (executor: QueryExecutor[A]) {
 
   private var finalDataSet: A = _
