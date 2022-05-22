@@ -14,9 +14,9 @@ from torch.autograd import Variable
 def BinaryAccuracy(y_pred,y):
     num_correct = 0
     num_examples = 0
-    print("this is accuracy output y")
-    print(torch.round(y_pred).type(y.type()))
-    print(y)
+   # print("this is accuracy output y")
+   # print(torch.round(y_pred).type(y.type()))
+   # print(y)
     correct = torch.eq(torch.round(y_pred).type(y.type()), y).view(-1)
     num_correct += torch.sum(correct).item()
     num_examples += correct.shape[0]
@@ -87,8 +87,8 @@ class Representation(nn.Module):
                batch_size += 1
             else:
                break
-        print("this is the batch size")
-        print(batch_size)
+       # print("this is the batch size")
+       # print(batch_size)
         num_level = conditions.size()[0]
         num_node_per_level = conditions.size()[1]
         num_condition_per_node = conditions.size()[2]
@@ -128,7 +128,7 @@ class Representation(nn.Module):
         output = hid[0]
 
         end = time.time()
-        print('Forest Evaluate Running Time: ', end - start)
+        #print('Forest Evaluate Running Time: ', end - start)
         last_output = output[0:batch_size]
         out = self.batch_norm2(last_output)
 
@@ -185,7 +185,7 @@ def train(train_start, train_end, validate_start, validate_end, num_epochs, para
         cost_loss_total = 0.
         model.train()
         for batch_idx in range(train_start, train_end):
-            print('batch_idx: ', batch_idx)
+            #print('batch_idx: ', batch_idx)
             target_model, operatorss, extra_infoss, conditionss, mapping = get_batch_job(batch_idx, directory=directory)
             target_model, operatorss, extra_infoss, conditionss, mapping = torch.IntTensor(target_model), \
                                                                                       torch.FloatTensor(operatorss), \
@@ -217,8 +217,8 @@ def train(train_start, train_end, validate_start, validate_end, num_epochs, para
             mymaccuracy.append(m.result())
             allaccuracy.append(m.result())
         batch_num = train_end - train_start
-        print("Epoch {}, training cost loss: {}".format(epoch, cost_loss_total / batch_num))
-        print("trainig accuracy mean {}".format(mean(mymaccuracy)))
+        #print("Epoch {}, training cost loss: {}".format(epoch, cost_loss_total / batch_num))
+        #print("trainig accuracy mean {}".format(mean(mymaccuracy)))
 
         cost_loss_total = 0.
         # accuracy
@@ -226,7 +226,7 @@ def train(train_start, train_end, validate_start, validate_end, num_epochs, para
         mymaccuracy = []
 
         for batch_idx in range(validate_start, validate_end):
-            print('batch_idx: ', batch_idx)
+           # print('batch_idx: ', batch_idx)
             target_model, operatorss, extra_infoss, conditionss, mapping = get_batch_job(batch_idx, directory=directory)
             target_model, operatorss, extra_infoss, conditionss, mapping = torch.IntTensor(target_model),\
                                                                                         torch.FloatTensor(operatorss), \
@@ -266,40 +266,34 @@ def train(train_start, train_end, validate_start, validate_end, num_epochs, para
         #print("accuracy: {}".format(BinaryAccuracy(predictions,actuals)))
         #print("binary loss: {}".format(bce_loss))
         acc.append(BinaryAccuracy(predictions,actuals))
-        print("validation accuracy mean {}".format(mean(mymaccuracy)))
+        #print("validation accuracy mean {}".format(mean(mymaccuracy)))
 
         #bcelsss.append(bce_loss)
-    print(*acc,sep=', ')
-    print("Best accuracy: {}".format(max(acc)))
-    print("Average accuracy: {}".format(mean(acc)))
-    print("Best validating cost loss: {}".format(min(lsss)))
+   # print(*acc,sep=', ')
+   # print("Best accuracy: {}".format(max(acc)))
+   # print("Average accuracy: {}".format(mean(acc)))
+   # print("Best validating cost loss: {}".format(min(lsss)))
     end2 = time.time()
-    print("this is training time " + str(round( 1000 * ( end2 - start2))))
-    print("All accuracy mean {}".format(mean(allaccuracy)))
-    print("Best of accuracy {}".format(max(allaccuracy)))
+    #print("this is training time " + str(round( 1000 * ( end2 - start2))))
+    #print("All accuracy mean {}".format(mean(allaccuracy)))
+    #print("Best of accuracy {}".format(max(allaccuracy)))
     torch.save(model.state_dict(), os.path.join("/home/chahrazed/PycharmProjects/SOMproject/plan_model/model","cost_prediction_optima.pth"))
     return model
 
-def predict(validate_start, validate_end,model, directory):
-    estimate_costs=[]
-    prediction_time=[]
-    for batch_idx in range(validate_start, validate_end):
-        target_model, operatorss, extra_infoss, conditionss, mapping = get_batch_job(batch_idx, directory=directory)
-        target_model, operatorss, extra_infoss, conditionss, mapping = torch.IntTensor(target_model), \
+def predict(model, directory):
+    target_model, operatorss, extra_infoss, conditionss, mapping = get_batch_job(0, directory=directory)
+    target_model, operatorss, extra_infoss, conditionss, mapping = torch.IntTensor(target_model), \
                                                                        torch.FloatTensor(operatorss), \
                                                                        torch.FloatTensor(extra_infoss), \
                                                                        torch.FloatTensor(conditionss), \
                                                                        torch.FloatTensor(mapping)
-        operatorss, extra_infoss, conditionss = operatorss.squeeze(0), extra_infoss.squeeze(0), conditionss.squeeze(0)
-        mapping = mapping.squeeze(0)
-        target_model, operatorss, extra_infoss, conditionss = Variable(target_model), \
+    operatorss, extra_infoss, conditionss = operatorss.squeeze(0), extra_infoss.squeeze(0), conditionss.squeeze(0)
+    mapping = mapping.squeeze(0)
+    target_model, operatorss, extra_infoss, conditionss = Variable(target_model), \
                                                               Variable(operatorss), \
                                                               Variable(extra_infoss), \
                                                               Variable(conditionss)
-        model.eval()
-        import time
-        start_time = round(time.time() * 1000)
-        estimate_cost = model(operatorss, extra_infoss, conditionss, mapping)
-        prediction_time.append(round(time.time() * 1000) - start_time)
-        estimate_costs.append(estimate_cost)
-    return estimate_costs,prediction_time
+    model.eval()
+    estimate_cost = model(operatorss, extra_infoss, conditionss, mapping)
+
+    return estimate_cost.item()

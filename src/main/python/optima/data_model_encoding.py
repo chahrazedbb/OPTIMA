@@ -2,30 +2,30 @@ import numpy as np
 import re
 from sklearn.ensemble._hist_gradient_boosting.grower import TreeNode
 
-from plan_model.pytorch_model.meta_info import determine_prefix
+from meta_info import determine_prefix
 
 
-def get_representation(value, word_vectors):
-    if value in word_vectors:
-        embedded_result = np.array(list(word_vectors[value]))
-    else:
-        embedded_result = np.array([0.0 for _ in range(500)])
+def get_representation(value):
+    #if value in word_vectors:
+    #    embedded_result = np.array(list(word_vectors[value]))
+    #else:
+    embedded_result = np.array([0.0 for _ in range(500)])
     hash_result = np.array([0.0 for _ in range(500)])
     for t in value:
         hash_result[hash(t) % 500] = 1.0
     return np.concatenate((embedded_result, hash_result), 0)
 
 
-def get_str_representation(value, column, word_vectors):
+def get_str_representation(value, column):
     vec = np.array([])
     count = 0
     for v in value.split('%'):
         if len(v) > 0:
             if len(vec) == 0:
-                vec = get_representation(column + v, word_vectors)
+                vec = get_representation(column + v)
                 count = 1
             else:
-                new_vec = get_representation(column + v, word_vectors)
+                new_vec = get_representation(column + v)
                 vec = vec + new_vec
                 count += 1
     if count > 0:
@@ -75,19 +75,19 @@ def encode_condition_op(condition_op, relation_name, parameters):
             operator_vec = [0 for _ in range(parameters.compare_ops_total_num)]
             operator_vec[operator_idx - 1] = 1
             right_value = right_value.strip('\'')[8:]
-            right_value_vec = get_str_representation(right_value, left_value, parameters.word_vectors).tolist()
+            right_value_vec = get_str_representation(right_value, left_value).tolist()
         elif re.match(r'^__NOTLIKE__', right_value) is not None:
             operator_idx = parameters.compare_ops_id['!~~']
             operator_vec = [0 for _ in range(parameters.compare_ops_total_num)]
             operator_vec[operator_idx - 1] = 1
             right_value = right_value.strip('\'')[11:]
-            right_value_vec = get_str_representation(right_value, left_value, parameters.word_vectors).tolist()
+            right_value_vec = get_str_representation(right_value, left_value).tolist()
         elif re.match(r'^__NOTEQUAL__', right_value) is not None:
             operator_idx = parameters.compare_ops_id['!=']
             operator_vec = [0 for _ in range(parameters.compare_ops_total_num)]
             operator_vec[operator_idx - 1] = 1
             right_value = right_value.strip('\'')[12:]
-            right_value_vec = get_str_representation(right_value, left_value, parameters.word_vectors).tolist()
+            right_value_vec = get_str_representation(right_value, left_value).tolist()
         elif re.match(r'^__ANY__', right_value) is not None:
             operator_idx = parameters.compare_ops_id['=']
             operator_vec = [0 for _ in range(parameters.compare_ops_total_num)]
@@ -99,7 +99,7 @@ def encode_condition_op(condition_op, relation_name, parameters):
                 v = v.strip('"').strip('\'')
                 if len(v) > 0:
                     count += 1
-                    vec = get_str_representation(v, left_value, parameters.word_vectors).tolist()
+                    vec = get_str_representation(v, left_value).tolist()
                     if len(right_value_vec) == 0:
                         right_value_vec = [0 for _ in vec]
                     for idx, vv in enumerate(vec):
@@ -115,14 +115,14 @@ def encode_condition_op(condition_op, relation_name, parameters):
             elif operator == '!=':
                 right_value_vec = [0]
             else:
-                print(operator)
+                #print(operator)
                 raise
         else:
             #             print (left_value, operator, right_value)
             operator_idx = parameters.compare_ops_id[operator]
             operator_vec = [0 for _ in range(parameters.compare_ops_total_num)]
             operator_vec[operator_idx - 1] = 1
-            right_value_vec = get_str_representation(right_value, left_value, parameters.word_vectors).tolist()
+            right_value_vec = get_str_representation(right_value, left_value).tolist()
         vec = [0 for _ in range(parameters.bool_ops_total_num)]
         vec = vec + left_value_vec + operator_vec + right_value_vec
     num_pad = parameters.condition_op_dim - len(vec)
@@ -284,8 +284,8 @@ def normalize_label(labels, mini, maxi):
 
 def merge_plans_level(level1, level2, isMapping=False):
     for idx, level in enumerate(level2):
-        print("idx")
-        print(idx)
+      #  print("idx")
+      #  print(idx)
         if idx >= len(level1):
             level1.append([])
         if isMapping:
@@ -355,7 +355,7 @@ def save_data_job(plans, parameters, istest=False, batch_size=64, directory='job
     timelist = []
     batch_id = 0
     for batch_id, plans_batch in enumerate(chunks(plans, batch_size)):
-        print('batch_id', batch_id, len(plans_batch))
+      #  print('batch_id', batch_id, len(plans_batch))
         import time
         start_time = round(time.time() * 1000)
         target_model_batch, operators_batch, extra_infos_batch, conditions_batch, mapping_batch = make_data_job(plans_batch, parameters)
@@ -367,5 +367,5 @@ def save_data_job(plans, parameters, istest=False, batch_size=64, directory='job
         #np.save(directory + '/condition_masks_' + suffix + str(batch_id) + '.np', condition_masks_batch)
         np.save(directory + '/mapping_' + suffix + str(batch_id) + '.np', mapping_batch)
         #print("--- %s seconds ---" % (time.time() - start_time))
-        print('saved: ', str(batch_id))
-    print(timelist)
+       # print('saved: ', str(batch_id))
+   # print(timelist)
