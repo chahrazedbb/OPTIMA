@@ -118,7 +118,8 @@ OPTIMA can be extented by adding new connectors. For example to connect to parqu
 ``` sqlContext.read.(sourcePath).rdd ```
 
 ## Work in Progress
-Defining user-friendly interfaces for loading mapping file (RML), connectirng supprted databases (Neo4j, etc.) and wirtting SPARQL query  
+Defining user-friendly interfaces for loading mapping file (RML), connectirng supprted databases (Neo4j, etc.) and wirtting SPARQL query.
+
 ![Screenshot from 2022-06-07 02-14-19](https://user-images.githubusercontent.com/40392907/175013728-7d569418-f702-4f18-9a45-373532ef0cfc.png)
 
 
